@@ -780,14 +780,20 @@ HRESULT MulticoreJitProfilePlayer::HandleModuleInfoRecord(unsigned moduleTo, uns
                     {
                         // Unable to load the assembly, so abort.
                         m_stats.m_nMissingModuleSkip++;
-                        hr = E_ABORT;
+                        if (ShouldAbort(false))
+                        {
+                            hr = E_ABORT;
+                        }
                     }
                 }
                 else
                 {
                     // Unable to load the assembly, so abort.
                     m_stats.m_nMissingModuleSkip++;
-                    hr = E_ABORT;
+                    if (ShouldAbort(false))
+                    {
+                        hr = E_ABORT;
+                    }
                 }
             }
         }
@@ -831,9 +837,15 @@ DomainAssembly * MulticoreJitProfilePlayer::LoadAssembly(SString & assemblyName)
     }
 
     // Bind and load the assembly.
-    return spec.LoadDomainAssembly(
+    DomainAssembly* pDomainAssembly = spec.LoadDomainAssembly(
         FILE_LOADED,
         FALSE); // Don't throw on FileNotFound.
+    if (pDomainAssembly == NULL)
+    {
+        AssemblyBinder* pBinder = spec.GetBinderFromParentAssembly(GetAppDomain());
+        pBinder->GetAppContext()->GetFailureCache()->Remove(assemblyName);
+    }
+    return pDomainAssembly;
 }
 
 HRESULT MulticoreJitProfilePlayer::HandleNonGenericMethodInfoRecord(unsigned moduleIndex, unsigned token)
