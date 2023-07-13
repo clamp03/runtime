@@ -18754,14 +18754,38 @@ void GenTreeArrAddr::ParseArrayAddress(Compiler* comp, GenTree** pArr, ValueNum*
                 break;
 
             case GT_COMMA:
+            {
                 // We don't care about exceptions for this purpose.
-                if (tree->AsOp()->gtOp1->OperIs(GT_BOUNDS_CHECK) || tree->AsOp()->gtOp1->IsNothingNode())
+                GenTree* gtOp1 = tree->AsOp()->gtOp1;
+                if (gtOp1->OperIs(GT_BOUNDS_CHECK) || gtOp1->IsNothingNode())
                 {
                     ParseArrayAddressWork(tree->AsOp()->gtOp2, comp, inputMul, pArr, pInxVN, pOffset);
                     return;
                 }
+                else if (gtOp1->OperIs(GT_STORE_LCL_VAR))
+                {
+                    const LclVarDsc* varDsc = comp->lvaGetDesc(gtOp1->AsLclVar());
+                    if (varDsc->lvIsCSE)
+                    {
+                        ParseArrayAddressWork(gtOp1->AsOp()->gtOp1, comp, inputMul, pArr, pInxVN, pOffset);
+                    }
+                }
                 break;
-
+            }
+            case GT_LCL_VAR:
+            {
+                const LclVarDsc* varDsc = comp->lvaGetDesc(tree->AsLclVarCommon());
+                if (varDsc->lvIsCSE)
+                {
+                    LclSsaVarDsc*        ssaVarDsc = varDsc->GetPerSsaData(SsaConfig::FIRST_SSA_NUM);
+                    GenTreeLclVarCommon* store     = ssaVarDsc->GetDefNode();
+                    if (store)
+                    {
+                        ParseArrayAddressWork(store->AsOp()->gtOp1, comp, inputMul, pArr, pInxVN, pOffset);
+                    }
+                }
+                break;
+            }
             default:
                 break;
         }
