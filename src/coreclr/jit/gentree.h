@@ -6891,7 +6891,8 @@ struct GenTreeArrLen : public GenTreeArrCommon
     }
 
 private:
-    int gtArrLenOffset; // constant to add to "ArrRef()" to get the address of the array length.
+    int      gtArrLenOffset; // constant to add to "ArrRef()" to get the address of the array length.
+    unsigned gtLoopInd;
 
 public:
     int ArrLenOffset() const
@@ -6899,8 +6900,18 @@ public:
         return gtArrLenOffset;
     }
 
+    void SetLoopIndex(unsigned loopInd)
+    {
+        gtLoopInd = loopInd;
+    }
+
+    unsigned LoopIndex() const
+    {
+        return gtLoopInd;
+    }
+
     GenTreeArrLen(var_types type, GenTree* arrRef, int lenOffset)
-        : GenTreeArrCommon(GT_ARR_LENGTH, type, arrRef), gtArrLenOffset(lenOffset)
+        : GenTreeArrCommon(GT_ARR_LENGTH, type, arrRef), gtArrLenOffset(lenOffset), gtLoopInd(UINT32_MAX)
     {
     }
 

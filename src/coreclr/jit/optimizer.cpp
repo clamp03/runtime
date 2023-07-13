@@ -861,6 +861,7 @@ bool Compiler::optCheckIterInLoopTest(unsigned loopInd, GenTree* test, unsigned 
             if (!optIsVarAssgLoop(loopInd, array->AsLclVarCommon()->GetLclNum()))
             {
                 optLoopTable[loopInd].lpFlags |= LPFLG_ARRLEN_LIMIT;
+                limitOp->AsArrLen()->SetLoopIndex(loopInd);
             }
             else
             {

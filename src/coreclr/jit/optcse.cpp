@@ -3075,6 +3075,17 @@ public:
                         }
                     }
                 }
+                if (exp->OperGet() == GT_ARR_LENGTH)
+                {
+                    unsigned loopInd = exp->AsArrLen()->LoopIndex();
+                    if (loopInd < BasicBlock::MAX_LOOP_NUM &&
+                        (m_pCompiler->optLoopTable[loopInd].lpFlags & LPFLG_ARRLEN_LIMIT) != 0)
+                    {
+                        m_pCompiler->optLoopTable[loopInd].lpFlags =
+                            (m_pCompiler->optLoopTable[loopInd].lpFlags & ~LPFLG_ARRLEN_LIMIT) | LPFLG_VAR_LIMIT;
+                        assert((m_pCompiler->optLoopTable[loopInd].lpFlags & LPFLG_ARRLEN_LIMIT) == 0);
+                    }
+                }
 #ifdef DEBUG
                 cse->gtDebugFlags |= GTF_DEBUG_VAR_CSE_REF;
 #endif // DEBUG
