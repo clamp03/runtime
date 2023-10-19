@@ -1073,7 +1073,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
                 argState.AddArg(vaSigCookieIndex);
             }
 
-#if defined(HOST_ARM) || defined(HOST_AMD64) || defined(HOST_ARM64)
+#if defined(HOST_ARM) || defined(HOST_AMD64) || defined(HOST_ARM64) || defined(HOST_RISCV64)
             // Generics context comes before args on ARM.  Would be better if I factored this out as a call,
             // to avoid large swatches of duplicate code.
             if (hasGenericsContextArg)
@@ -1081,7 +1081,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
                 argPerm[genericsContextArgIndex] = physArgIndex; physArgIndex++;
                 argState.AddArg(genericsContextArgIndex);
             }
-#endif // HOST_ARM || HOST_AMD64 || HOST_ARM64
+#endif // HOST_ARM || HOST_AMD64 || HOST_ARM64 || HOST_RISCV64
 
             CORINFO_ARG_LIST_HANDLE argPtr = info->args.args;
             // Some arguments are have been passed in registers, some in memory. We must generate code that
@@ -1635,7 +1635,32 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
 #elif defined(HOST_LOONGARCH64)
         assert(!"unimplemented on LOONGARCH yet");
 #elif defined(HOST_RISCV64)
-        assert(!"unimplemented on RISCV64 yet");
+
+        UINT stackFrameSize = argState.numFPRegArgSlots;
+
+        sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots);
+
+#if INTERP_ILSTUBS
+        if (pMD->IsILStub())
+        {
+            // Third argument is stubcontext, in t2 (METHODDESC_REGISTER).
+            sl.EmitMovReg(IntReg(12), IntReg(7));
+        }
+        else
+#endif
+        {
+            // For a non-ILStub method, push NULL as the third StubContext argument.
+            sl.EmitMovConstant(IntReg(12), 0);
+        }
+        // Second arg is pointer to the base of the ILargs arr -- i.e., the current stack value.
+        sl.EmitAddImm(IntReg(11), RegSp, sl.GetSavedRegArgsOffset());
+
+        // First arg is the pointer to the interpMethodInfo structure
+        sl.EmitMovConstant(IntReg(10), reinterpret_cast<UINT64>(interpMethInfo));
+
+        sl.EmitCallLabel(sl.NewExternalCodeLabel((LPVOID)interpretMethodFunc), FALSE, FALSE);
+
+        sl.EmitEpilog();
 #else
 #error unsupported platform
 #endif
@@ -9689,7 +9714,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
     // This is the argument slot that will be used to hold the return value.
     // In UNIX_AMD64_ABI, return type may have need tow ARG_SLOTs.
     ARG_SLOT retVals[2] = {0, 0};
-#if !defined(HOST_ARM) && !defined(UNIX_AMD64_ABI)
+#if !defined(HOST_ARM) && !defined(UNIX_AMD64_ABI) && !defined(TARGET_RISCV64)
     _ASSERTE (NUMBER_RETURNVALUE_SLOTS == 1);
 #endif
 
