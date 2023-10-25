@@ -553,7 +553,9 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
     {
         GCPreemp transitionIfILStub(transitionToPreemptive);
         DWORD* pLastError = &GetThread()->m_dwLastErrorInterp;
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         CallDescrWorkerInternal(&callDescrData);
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         *pLastError = GetLastError();
     }
     else

@@ -794,6 +794,13 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
             TRACE_SKIPPED(clsName, methName, "stub num not in range, not interpreting.");
             return CORJIT_SKIPPED;
         }
+        /*
+        if (info->args.retType == CORINFO_TYPE_VALUECLASS)
+        {
+            TRACE_SKIPPED(clsName, methName, "return valueclass");
+            return CORJIT_SKIPPED;
+        }
+        */
 
         if (s_DumpInterpreterStubsFlag.val(CLRConfig::INTERNAL_DumpInterpreterStubs))
         {
@@ -1432,7 +1439,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         sl.X86EmitPopReg(kEBP);
         sl.X86EmitReturn(static_cast<WORD>(argState.callerArgStackSlots * sizeof(void*)));
 #elif defined(UNIX_AMD64_ABI)
-        bool hasTowRetSlots = info->args.retType == CORINFO_TYPE_VALUECLASS &&
+        bool hasTwoRetSlots = info->args.retType == CORINFO_TYPE_VALUECLASS &&
             getClassSize(info->args.retTypeClass) == 16;
 
         int fixedTwoSlotSize = 16;
@@ -1484,7 +1491,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         sl.X86EmitRegLoad(ARGUMENT_kREG1, reinterpret_cast<UINT_PTR>(interpMethInfo));
 
         sl.X86EmitCall(sl.NewExternalCodeLabel(interpretMethodFunc), 0);
-        if (hasTowRetSlots) {
+        if (hasTwoRetSlots) {
             sl.X86EmitEspOffset(0x8b, kRAX, 0);
             sl.X86EmitEspOffset(0x8b, kRDX, 8);
         }
@@ -1635,8 +1642,10 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
 #elif defined(HOST_LOONGARCH64)
         assert(!"unimplemented on LOONGARCH yet");
 #elif defined(HOST_RISCV64)
+        bool hasTwoRetSlots = info->args.retType == CORINFO_TYPE_VALUECLASS &&
+            getClassSize(info->args.retTypeClass) == 16;
 
-        UINT stackFrameSize = argState.numFPRegArgSlots;
+        UINT stackFrameSize  = argState.numFPRegArgSlots;
 
         sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots);
 
@@ -1659,6 +1668,12 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         sl.EmitMovConstant(IntReg(10), reinterpret_cast<UINT64>(interpMethInfo));
 
         sl.EmitCallLabel(sl.NewExternalCodeLabel((LPVOID)interpretMethodFunc), FALSE, FALSE);
+        if (hasTwoRetSlots)
+        {
+            fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, sizeof(void*));
+            sl.EmitLoad(IntReg(10), RegSp, 0);
+            sl.EmitLoad(IntReg(11), RegSp, sizeof(void*));
+        }
 
         sl.EmitEpilog();
 #else
@@ -2068,6 +2083,7 @@ void Interpreter::DoMonitorExitWork()
 
 void Interpreter::ExecuteMethod(ARG_SLOT* retVal, _Out_ bool* pDoJmpCall, _Out_ unsigned* pJmpCallToken)
 {
+    static int count = 0;
 #if INTERP_DYNAMIC_CONTRACTS
     CONTRACTL {
         THROWS;
@@ -2136,6 +2152,7 @@ EvalLoop:
     DoMonitorEnterWork();
 
     INTERPLOG("START %d, %s\n", m_methInfo->m_stubNum, methName);
+    fprintf(stderr, "[CLAMP] START %d, %s %d\n", m_methInfo->m_stubNum, methName, count++);
     for (;;)
     {
         // TODO: verify that m_ILCodePtr is legal, and we haven't walked off the end of the IL array? (i.e., bad IL).
@@ -2451,6 +2468,15 @@ EvalLoop:
                 // Is it an struct contained in $rax and $rdx
                 else if (m_methInfo->m_returnType == CORINFO_TYPE_VALUECLASS
                          && sz == 16)
+                {
+                    //The Fixed Two slot return buffer address
+                    memcpy(m_ilArgs-16, OpStackGet<void*>(0), sz);
+                }
+
+#elif defined(TARGET_RISCV64)
+                // Is it an struct contained in two slots 
+                else if (m_methInfo->m_returnType == CORINFO_TYPE_VALUECLASS
+                        && sz == 16)
                 {
                     //The Fixed Two slot return buffer address
                     memcpy(m_ilArgs-16, OpStackGet<void*>(0), sz);
@@ -3423,6 +3449,7 @@ ExitEvalLoop:;
         }
     }
     EX_END_CATCH(RethrowTransientExceptions)
+    fprintf(stderr, "[CLAMP] EXIT %d, %s %d\n", m_methInfo->m_stubNum, methName, --count);
 }
 
 #ifdef _MSC_VER
@@ -9473,7 +9500,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
             HFAReturnArgSlots = (HFAReturnArgSlots + sizeof(ARG_SLOT) - 1) / sizeof(ARG_SLOT);
         }
     }
-#elif defined(UNIX_AMD64_ABI)
+#elif defined(UNIX_AMD64_ABI) || defined(TARGET_RISCV64)
     unsigned HasTwoSlotBuf = sigInfo.retType == CORINFO_TYPE_VALUECLASS &&
         getClassSize(sigInfo.retTypeClass) == 16;
 #endif
@@ -9993,7 +10020,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
             bool b = CycleTimer::GetThreadCyclesS(&startCycles); _ASSERTE(b);
 #endif // INTERP_ILCYCLE_PROFILE
 
-#if defined(UNIX_AMD64_ABI)
+#if defined(UNIX_AMD64_ABI) || defined(TARGET_RISCV64)
             mdcs.CallTargetWorker(args, retVals, HasTwoSlotBuf ? 16: 8);
 #else
             mdcs.CallTargetWorker(args, retVals, 8);
@@ -10139,7 +10166,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
                     {
                         OpStackSet<INT64>(m_curStackHt, GetSmallStructValue(&smallStructRetVal, retTypeSz));
                     }
-#if defined(UNIX_AMD64_ABI)
+#if defined(UNIX_AMD64_ABI) || defined(TARGET_RISCV64)
                     else if (HasTwoSlotBuf)
                     {
                         void* dst = LargeStructOperandStackPush(16);
