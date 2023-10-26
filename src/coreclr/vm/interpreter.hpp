@@ -192,6 +192,7 @@ void Interpreter::StLoc(int locNum)
         void* srcAddr = OpStackGet<void*>(ind);
         memcpy(addr, srcAddr, sz);
         LargeStructOperandStackPop(sz, srcAddr);
+        fprintf(stderr, "[CLAMP] %s %d %d STLOC %llu\n", __PRETTY_FUNCTION__, __LINE__, sz, ((unsigned long long*)addr)[1]);
     }
     else
     {

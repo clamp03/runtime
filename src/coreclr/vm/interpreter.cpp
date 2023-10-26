@@ -918,6 +918,9 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         // x8 through x15 are scratch registers on ARM64.
         IntReg x8 = IntReg(8);
         IntReg x9 = IntReg(9);
+
+#elif defined(HOST_RISCV64)
+#else
 #error unsupported platform
 #endif
     }
@@ -1647,7 +1650,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
 
         UINT stackFrameSize  = argState.numFPRegArgSlots;
 
-        sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots);
+        sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots, hasTwoRetSlots ? 2 * sizeof(void*) : 0);
 
 #if INTERP_ILSTUBS
         if (pMD->IsILStub())
@@ -1671,6 +1674,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         if (hasTwoRetSlots)
         {
             fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, sizeof(void*));
+            // TODO According to flag value, set to int and float registers
             sl.EmitLoad(IntReg(10), RegSp, 0);
             sl.EmitLoad(IntReg(11), RegSp, sizeof(void*));
         }
@@ -2479,7 +2483,7 @@ EvalLoop:
                         && sz == 16)
                 {
                     //The Fixed Two slot return buffer address
-                    memcpy(m_ilArgs-16, OpStackGet<void*>(0), sz);
+                    memcpy(m_ilArgs-32, OpStackGet<void*>(0), sz); // OpStackGet size is 16
                 }
 #endif
                 else if (CorInfoTypeIsFloatingPoint(m_methInfo->m_returnType) &&
@@ -4326,6 +4330,8 @@ void Interpreter::LdLocA(int locNum)
     void* addr;
     if (tp.IsLargeStruct(&m_interpCeeInfo))
     {
+        const char* methName = eeGetMethodFullName(m_methInfo->m_method);
+        fprintf(stderr, "[CLAMP] LdLocA %s %d %s\n", __PRETTY_FUNCTION__, __LINE__, methName);
         void* structPtr = ArgSlotEndiannessFixup(reinterpret_cast<ARG_SLOT*>(FixedSizeLocalSlot(locNum)), sizeof(void**));
         addr = *reinterpret_cast<void**>(structPtr);
     }
@@ -7602,6 +7608,7 @@ void Interpreter::LdFld(FieldDesc* fldIn)
             break;
         case 4:
             OpStackSet<INT32>(stackInd, *reinterpret_cast<INT32*>(ptr));
+            fprintf(stderr, "[CLAMP] %s %d LdFld %d\n", __PRETTY_FUNCTION__, __LINE__, *reinterpret_cast<INT32*>(ptr));
             break;
         case 8:
             OpStackSet<INT64>(stackInd, *reinterpret_cast<INT64*>(ptr));
@@ -10169,9 +10176,12 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
 #if defined(UNIX_AMD64_ABI) || defined(TARGET_RISCV64)
                     else if (HasTwoSlotBuf)
                     {
+                        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
                         void* dst = LargeStructOperandStackPush(16);
                         CopyValueClassUnchecked(dst, retVals, GetMethodTableFromClsHnd(retTypeClsHnd));
                         OpStackSet<void*>(m_curStackHt, dst);
+                        fprintf(stderr, "[CLAMP] %s %d - %u %u\n", __PRETTY_FUNCTION__, __LINE__, (unsigned)(((unsigned long long*)dst)[1]), (unsigned)retVals[1]);
+
                     }
 #endif
                     else

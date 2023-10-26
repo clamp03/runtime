@@ -380,7 +380,8 @@ public:
     void EmitStore(IntReg src, IntReg destAddr, int offset = 0);
     void EmitStore(FloatReg src, IntReg destAddr, int offset = 0);
     void EmitProlog(unsigned short cIntRegArgs,
-                    unsigned short cFpRegArgs);
+                    unsigned short cFpRegArgs,
+                    unsigned short cbStackSpace = 0);
 
     void EmitEpilog();
     void EmitRet();

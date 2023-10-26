@@ -64,7 +64,9 @@ void CallDescrWorkerWithHandler(
 
     BEGIN_CALL_TO_MANAGEDEX(fCriticalCall ? EEToManagedCriticalCall : EEToManagedDefault);
 
+    fprintf(stderr, "[CLAMP] %s %d %p %x\n", __PRETTY_FUNCTION__, __LINE__, pCallDescrData, pCallDescrData->fpReturnSize);
     CallDescrWorker(pCallDescrData);
+    fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, pCallDescrData);
 
     END_CALL_TO_MANAGED();
 }
@@ -561,7 +563,9 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
     else
 #endif // FEATURE_INTERPRETER
     {
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         CallDescrWorkerWithHandler(&callDescrData);
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     }
 
     if (pvRetBuff != NULL)
