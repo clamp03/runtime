@@ -384,9 +384,45 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
         BYTE*   pMap            = (BYTE*)&dwRegTypeMap;
 #endif // CALLDESCR_REGTYPEMAP
 
+        int adjust = 0;
         if (m_argIt.HasThis())
         {
-            *((LPVOID*)(pTransitionBlock + m_argIt.GetThisOffset())) = ArgSlotToPtr(pArguments[arg++]);
+            fprintf(stderr, "[CLAMP] %s %d %d %d %d %d %d %p\n", __PRETTY_FUNCTION__, __LINE__, m_argIt.GetThisOffset(), m_argIt.GetArgSize(), arg, TransitionBlock::GetOffsetOfArgs(), m_argIt.GetArgType(), pArguments);
+            fprintf(stderr, "[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__,
+                    m_pMD->GetMethodTable()->IsRegPassedStruct(),
+                    m_pMD->GetMethodTable()->IsValueType());
+            
+            TypeHandle th(m_pMD->GetMethodTable());
+            fprintf(stderr, "[CLAMP] %s %d %d %s\n", __PRETTY_FUNCTION__, __LINE__, th.GetSize(), m_pMD->GetName());
+            /*
+            if (th.GetSize() < 16)
+            {
+                    *((LPVOID*)(pTransitionBlock + m_argIt.GetThisOffset())) = ArgSlotToPtr(pArguments[arg++]);
+            }
+            else
+            */
+            {
+                *((LPVOID*)(pTransitionBlock + m_argIt.GetThisOffset())) = ArgSlotToPtr(pArguments[arg]);
+                /*
+                unsigned long long tmp = ((TransitionBlock*)pTransitionBlock)->m_argumentRegisters.a[0];
+                fprintf(stderr, "[CLAMP] %s %d -- %p\n", __PRETTY_FUNCTION__, __LINE__, ArgSlotToPtr(pArguments[arg]));
+                fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x %p %p %p %p %d\n", __PRETTY_FUNCTION__, __LINE__, pTransitionBlock, pTransitionBlock + m_argIt.GetThisOffset(), m_argIt.GetThisOffset(), tmp, (unsigned long long*)pArguments[arg], ((unsigned long long*)(pArguments[arg]) + 1), pArguments, arg);
+                */
+                arg++;
+#if 0
+                if (th.GetSize() == 16 /*|| m_argIt.GetArgSize() == 16*/)
+                {
+                    CopyMemory((pTransitionBlock + m_argIt.GetThisOffset()), (LPVOID)ArgSlotToPtr(&pArguments[arg + 1]), 16);
+                    fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, (unsigned long long*)((TransitionBlock*)pTransitionBlock)->m_argumentRegisters.a[0], (unsigned long long*)((TransitionBlock*)pTransitionBlock)->m_argumentRegisters.a[1]);
+                    fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, *(unsigned*)(((TransitionBlock*)pTransitionBlock)->m_argumentRegisters.a[0] + 8), (unsigned long long*)(((TransitionBlock*)pTransitionBlock)->m_argumentRegisters.a[0] + 8));
+                }
+                arg++;
+#endif
+                //*((LPVOID*)(pTransitionBlock + m_argIt.GetThisOffset())) = ArgSlotToPtr(pArguments[arg++]);
+                //*((LPVOID*)(pTransitionBlock + m_argIt.GetThisOffset() + 8)) = ArgSlotToPtr(pArguments[arg++]) + 8;
+            }
+            //CopyMemory(*((LPVOID*)(pTransitionBlock + m_argIt.GetThisOffset())), ArgSlotToPtr(pArguments[arg++]), th.GetSize());
+            //*((LPVOID*)(pTransitionBlock + m_argIt.GetThisOffset())) = ArgSlotToPtr(pArguments[arg++]);
         }
 
         if (m_argIt.HasRetBuffArg())
@@ -449,6 +485,7 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
             ArgDestination argDest(pTransitionBlock, ofs, m_argIt.GetArgLocDescForStructInRegs());
 
             UINT32 stackSize = m_argIt.GetArgSize();
+            fprintf(stderr, "[CLAMP] %s %d stack size %d\n", __PRETTY_FUNCTION__, __LINE__, stackSize);
             // We need to pass in a pointer, but be careful of the ARG_SLOT calling convention. We might already have a pointer in the ARG_SLOT.
             PVOID pSrc = stackSize > sizeof(ARG_SLOT) ? (LPVOID)ArgSlotToPtr(pArguments[arg]) : (LPVOID)ArgSlotEndiannessFixup((ARG_SLOT*)&pArguments[arg], stackSize);
 
@@ -464,12 +501,14 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
 #elif defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
             if (argDest.IsStructPassedInRegs())
             {
+                fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, stackSize);
                 argDest.CopyStructToRegisters(pSrc, stackSize, 0);
             }
             else
 #endif // TARGET_LOONGARCH64 || TARGET_RISCV64
             {
                 PVOID pDest = argDest.GetDestinationAddress();
+                fprintf(stderr, "[CLAMP] %s %d argDest %p 0x%x %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, pTransitionBlock, ofs, m_argIt.GetArgLocDescForStructInRegs(), pDest, offsetof(TransitionBlock, m_argumentRegisters));
 
                 switch (stackSize)
                 {
@@ -501,6 +540,7 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
 #endif
 
                     case 8:
+                        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
                         *((INT64*)pDest) = pArguments[arg];
                         break;
 
@@ -515,7 +555,9 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
     #endif // ENREGISTERED_PARAMTYPE_MAXSIZE
                         if (stackSize > sizeof(ARG_SLOT))
                         {
+                            fprintf(stderr, "[CLAMP] %s %d %d %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, stackSize, arg, ArgSlotToPtr(pArguments[arg]), pArguments);
                             CopyMemory(pDest, ArgSlotToPtr(pArguments[arg]), stackSize);
+                            fprintf(stderr, "[CLAMP] %s %d %llu %u %p\n", __PRETTY_FUNCTION__, __LINE__, *(unsigned long long*)pDest, *(unsigned*)(((unsigned long long*)pDest) + 1), pDest);
                         }
                         else
                         {

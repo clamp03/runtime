@@ -808,6 +808,7 @@ public:
           m_preciseGenericsContext(NULL),
           m_functionPointerStack(NULL)
     {
+        fprintf(stderr, "[CLAMP] %s %d INTERPRETER %p\n", __PRETTY_FUNCTION__, __LINE__, m_ilArgs);
         // We must zero the locals.
         memset(frameMemory, 0, methInfo_->LocalMemSize() + sizeof(GSCookie));
 

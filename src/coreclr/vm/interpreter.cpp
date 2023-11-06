@@ -1647,10 +1647,15 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
 #elif defined(HOST_RISCV64)
         bool hasTwoRetSlots = info->args.retType == CORINFO_TYPE_VALUECLASS &&
             getClassSize(info->args.retTypeClass) == 16;
+        bool skipThis = false;
 
+        fprintf(stderr, "[CLAMP] %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, info->args.retType,
+                ((info->args.retType == CORINFO_TYPE_VALUECLASS || info->args.retType == CORINFO_TYPE_REFANY) ? getClassSize(info->args.retTypeClass) : 0 ));
         UINT stackFrameSize  = argState.numFPRegArgSlots;
 
-        sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots, hasTwoRetSlots ? 2 * sizeof(void*) : 0);
+
+        sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots, hasTwoRetSlots ? 2 * sizeof(void*) : 0, pMD->IsStatic() && (strncmp(pMD->GetName(), "Ctor", 4) == 0));
+        fprintf(stderr, "[CLAMP %s %d TT %s %d %d 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, pMD->GetName(), interpMethInfo->GetFlag<InterpreterMethodInfo::Flag_hasThisArg>(), pMD->IsStatic(), info->args.callConv, argState.numRegArgs);
 
 #if INTERP_ILSTUBS
         if (pMD->IsILStub())
@@ -1665,6 +1670,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
             sl.EmitMovConstant(IntReg(12), 0);
         }
         // Second arg is pointer to the base of the ILargs arr -- i.e., the current stack value.
+        fprintf(stderr, "[CLAMP] %s %d GetSaved 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, sl.GetSavedRegArgsOffset(), hasTwoRetSlots);
         sl.EmitAddImm(IntReg(11), RegSp, sl.GetSavedRegArgsOffset());
 
         // First arg is the pointer to the interpMethodInfo structure
@@ -1673,12 +1679,11 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         sl.EmitCallLabel(sl.NewExternalCodeLabel((LPVOID)interpretMethodFunc), FALSE, FALSE);
         if (hasTwoRetSlots)
         {
-            fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, sizeof(void*));
+            fprintf(stderr, "[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, sizeof(void*), sl.GetSavedRegArgsOffset());
             // TODO According to flag value, set to int and float registers
-            sl.EmitLoad(IntReg(10), RegSp, 0);
-            sl.EmitLoad(IntReg(11), RegSp, sizeof(void*));
+            sl.EmitLoad(IntReg(10), RegSp, sl.GetSavedRegArgsOffset() - 32);
+            sl.EmitLoad(IntReg(11), RegSp, sl.GetSavedRegArgsOffset() - 32 + sizeof(void*));
         }
-
         sl.EmitEpilog();
 #else
 #error unsupported platform
@@ -2482,6 +2487,7 @@ EvalLoop:
                 else if (m_methInfo->m_returnType == CORINFO_TYPE_VALUECLASS
                         && sz == 16)
                 {
+                    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
                     //The Fixed Two slot return buffer address
                     memcpy(m_ilArgs-32, OpStackGet<void*>(0), sz); // OpStackGet size is 16
                 }
@@ -4304,6 +4310,11 @@ void Interpreter::LdArgA(int argNum)
     OpStackTypeSet(m_curStackHt, InterpreterType(CORINFO_TYPE_BYREF));
     OpStackSet<void*>(m_curStackHt, reinterpret_cast<void*>(GetArgAddr(argNum)));
     m_curStackHt++;
+    fprintf(stderr, "[CLAMP] %s %d LdArgA %d %p %d %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, argNum, GetArgAddr(argNum), m_curStackHt, (void*)*(unsigned long long*)GetArgAddr(argNum), GetArgType(argNum));
+    InterpreterType tp = GetArgType(argNum);
+    fprintf(stderr, "[CLAMP] %s %d LdArgA 0x%x %d %d %u\n", __PRETTY_FUNCTION__, __LINE__, tp.StackNormalize(), tp.IsStruct(), tp.IsLargeStruct(&m_interpCeeInfo), tp.Size(&m_interpCeeInfo));
+    fprintf(stderr, "[CLAMP] %s %d LdArgA %d %p %d %p\n", __PRETTY_FUNCTION__, __LINE__, argNum, GetArgAddr(argNum), m_curStackHt, (void*)*(((unsigned long long*)GetArgAddr(argNum)) + 1));
+    fprintf(stderr, "[CLAMP] %s %d LdArgA %d %p %d %p\n", __PRETTY_FUNCTION__, __LINE__, argNum, GetArgAddr(argNum), m_curStackHt, (void*)*(((unsigned long long*)GetArgAddr(argNum)) + 2));
 }
 
 void Interpreter::StArg(int argNum)
@@ -5347,6 +5358,7 @@ void Interpreter::Conv()
         {
             // Must convert the 32 bit value to unsigned first, so that we zero-extend if necessary.
             val = static_cast<T>(static_cast<UINT32>(OpStackGet<INT32>(opidx)));
+            fprintf(stderr, "[CLAMP] %s %d conv %d %llu\n", __PRETTY_FUNCTION__, __LINE__, OpStackGet<INT32>(opidx), val);
         }
         else
         {
@@ -5359,6 +5371,7 @@ void Interpreter::Conv()
         {
             // NativeInt might be 32 bits, so convert to unsigned before possibly widening.
             val = static_cast<T>(static_cast<NativeUInt>(OpStackGet<NativeInt>(opidx)));
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         }
         else
         {
@@ -6068,6 +6081,7 @@ void Interpreter::NewObj()
         m_structRetValITPtr = &structValRetIT;
         m_structRetValTempSpace = tempDest;
 
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         DoCallWork(/*virtCall*/false, tempDest, &methTok, &callInfo);
 
         if (sz > sizeof(INT64))
@@ -6098,7 +6112,9 @@ void Interpreter::NewObj()
     {
         // For a VAROBJSIZE class (currently == String), pass NULL as this to "pseudo-constructor."
         void* specialFlagArg = reinterpret_cast<void*>(0x1);  // Special value for "thisArg" argument of "DoCallWork": push NULL that's not on op stack.
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         DoCallWork(/*virtCall*/false, specialFlagArg, &methTok, &callInfo);  // pushes result automatically
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     }
     else
     {
@@ -6153,6 +6169,7 @@ void Interpreter::NewObj()
                 thisArgObj = AllocateObject(pNewObjMT);
                 break;
             }
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
 
             DoCallWork(/*virtCall*/false, OBJECTREFToObject(thisArgObj), &methTok, &callInfo);
         }
@@ -7608,7 +7625,7 @@ void Interpreter::LdFld(FieldDesc* fldIn)
             break;
         case 4:
             OpStackSet<INT32>(stackInd, *reinterpret_cast<INT32*>(ptr));
-            fprintf(stderr, "[CLAMP] %s %d LdFld %d\n", __PRETTY_FUNCTION__, __LINE__, *reinterpret_cast<INT32*>(ptr));
+            fprintf(stderr, "[CLAMP] %s %d LdFld 0x%x %p %u\n", __PRETTY_FUNCTION__, __LINE__, *reinterpret_cast<INT32*>(ptr), ptr, fldOffset);
             break;
         case 8:
             OpStackSet<INT64>(stackInd, *reinterpret_cast<INT64*>(ptr));
@@ -7723,11 +7740,13 @@ void Interpreter::StFld()
 
     if (addrCit == CORINFO_TYPE_CLASS)
     {
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         OBJECTREF obj = OBJECTREF(OpStackGet<Object*>(addrInd));
         ThrowOnInvalidPointer(OBJECTREFToObject(obj));
 
         if (valCit == CORINFO_TYPE_CLASS)
         {
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
             fld->SetRefValue(obj, ObjectToOBJECTREF(OpStackGet<Object*>(valInd)));
         }
         else if (valCit == CORINFO_TYPE_VALUECLASS)
@@ -7740,6 +7759,7 @@ void Interpreter::StFld()
 
             // I use GCSafeMemCpy below to ensure that write barriers happen for the case in which
             // the value class contains GC pointers.  We could do better...
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__, sz);
             if (sz > sizeof(INT64))
             {
                 // Large struct case: stack slot contains pointer...
@@ -7757,6 +7777,7 @@ void Interpreter::StFld()
         }
         else
         {
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
             BYTE* fldStart = dac_cast<PTR_BYTE>(OBJECTREFToObject(obj)) + sizeof(Object) + fldOffset;
             // fldStart is now a vulnerable byref
             GCX_FORBID();
@@ -7780,6 +7801,7 @@ void Interpreter::StFld()
     }
     else
     {
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         _ASSERTE(addrCit == CORINFO_TYPE_BYREF || addrCit == CORINFO_TYPE_NATIVEINT);
 
         INT8* destPtr = OpStackGet<INT8*>(addrInd);
@@ -7823,9 +7845,11 @@ void Interpreter::StFld()
                 break;
             case 4:
                 *reinterpret_cast<INT32*>(destPtr) = OpStackGet<INT32>(valInd);
+                fprintf(stderr, "[CLAMP] %s %d StFld %d %p %u\n", __PRETTY_FUNCTION__, __LINE__, *reinterpret_cast<INT32*>(destPtr), destPtr, fldOffset);
                 break;
             case 8:
                 *reinterpret_cast<INT64*>(destPtr) = OpStackGet<INT64>(valInd);
+                fprintf(stderr, "[CLAMP] %s %d StFld8 %llu %p %u\n", __PRETTY_FUNCTION__, __LINE__, *reinterpret_cast<INT64*>(destPtr), destPtr, fldOffset);
                 break;
             }
         }
@@ -9419,6 +9443,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
         sigInfo.retType = sig.retType;
         // Adding 'this' pointer because, numArgs doesn't include the this pointer.
         totalSigArgs = sigInfo.numArgs + sigInfo.hasThis();
+        fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, totalSigArgs);
 
         if ((sigInfo.callConv & CORINFO_CALLCONV_MASK) == CORINFO_CALLCONV_VARARG)
         {
@@ -9430,6 +9455,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
     else
     {
         totalSigArgs = sigInfo.totalILArgs();
+        fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, totalSigArgs);
     }
 
     // Note that "totalNativeArgs()" includes space for ret buff arg.
@@ -9486,11 +9512,41 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
     // the callee expects are on the stack, but may be adjusted downwards if the "this" argument
     // is provided by an allocation (the call is to a constructor).
     unsigned totalArgsOnILStack = totalSigArgs;
-    if (m_callThisArg != NULL)
+#if 0
+    if (methToCall->IsStatic() && m_callThisArg == (void*)0x1)
     {
+        fprintf(stderr, "[CLAMP] %s %d SET NULL\n", __PRETTY_FUNCTION__, __LINE__);
+        m_callThisArg = NULL;
+    }
+#endif
+    if (m_callThisArg != NULL /*|| sigInfo.hasThis()*/)
+    {
+        fprintf(stderr, "[CLAMP] %s %d %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, m_callThisArg, sigInfo.hasThis(), totalArgsOnILStack, virtualCall, methToCall->IsStatic());
         _ASSERTE(totalArgsOnILStack > 0);
         totalArgsOnILStack--;
     }
+
+    bool hasThis = sigInfo.hasThis();
+    /*
+    if (size_t(m_callThisArg) == 1)
+    {
+        //MethodDesc* callee = reinterpret_cast<MethodDesc*>(callInfoPtr->hMethod);
+        MethodDesc* callee = methToCall;
+        CORINFO_CLASS_HANDLE clsHnd = (CORINFO_CLASS_HANDLE)callee->GetMethodTable();
+        fprintf(stderr, "[CLAMP] %s %d SET NULL 0x%x 0x%x %p %p\n", __PRETTY_FUNCTION__, __LINE__, callInfoPtr->methodFlags, CorInfoTypeStackNormalize(GetTypeForPrimitiveValueClass(clsHnd)), exactClass, clsHnd);
+        fprintf(stderr, "[CLAMP] %s %d SET NULL 0x%x 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, callInfoPtr->methodFlags & CORINFO_FLG_CONSTRUCTOR, (GetTypeForPrimitiveValueClass(clsHnd)), clsHnd);
+
+        const char* clsName;
+        const char* methName = m_interpCeeInfo.getMethodNameFromMetadata((CORINFO_METHOD_HANDLE)methToCall, &clsName, NULL, NULL);
+        fprintf(stderr, "[CLAMP] %s %d %s %s\n", __PRETTY_FUNCTION__, __LINE__, clsName, methName);
+        if ((callInfoPtr->methodFlags & CORINFO_FLG_CONSTRUCTOR) && strncmp(clsName, "String", 6) == 0)
+        {
+            fprintf(stderr, "[CLAMP] %s %d SET NULL\n", __PRETTY_FUNCTION__, __LINE__);
+            m_callThisArg = NULL;
+            // hasThis = false;
+        }
+    }
+    */
 
 #if defined(FEATURE_HFA)
     // Does the callee have an HFA return type?
@@ -9564,6 +9620,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
     // The operand stack index of the first IL argument.
     _ASSERTE(m_curStackHt >= totalArgsOnILStack);
     int argsBase = m_curStackHt - totalArgsOnILStack;
+    fprintf(stderr, "[CLAMP] %s %d argsBase %x %x %x\n", __PRETTY_FUNCTION__, __LINE__, argsBase, m_curStackHt, totalArgsOnILStack);
 
     // Current on-stack argument index.
     unsigned arg = 0;
@@ -9704,8 +9761,9 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
 
     // CYCLE PROFILE: BEFORE ARG PROCESSING.
 
-    if (sigInfo.hasThis())
+    if (sigInfo.hasThis() && hasThis)
     {
+        fprintf(stderr, "[CLAMP] %s %d sigInfo hasThis %d %p %d %p\n", __PRETTY_FUNCTION__, __LINE__, curArgSlot, args, arg, m_callThisArg);
         if (m_callThisArg != NULL)
         {
             if (size_t(m_callThisArg) == 0x1)
@@ -9714,14 +9772,23 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
             }
             else
             {
+                fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
                 args[curArgSlot] = PtrToArgSlot(m_callThisArg);
             }
             argTypes[curArgSlot] = InterpreterType(CORINFO_TYPE_BYREF);
         }
         else
         {
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
             args[curArgSlot] = PtrToArgSlot(OpStackGet<void*>(argsBase + arg));
             argTypes[curArgSlot] = OpStackTypeGet(argsBase + arg);
+            fprintf(stderr, "[CLAMP] %s %d %d 0x%x %p %x %p\n", __PRETTY_FUNCTION__, __LINE__, (argTypes[curArgSlot].Size(&m_interpCeeInfo)), argTypes[curArgSlot], args, curArgSlot, args[curArgSlot]);
+            /*
+            if (argTypes[curArgSlot].Size(&m_interpCeeInfo) > 8)
+            {
+                fprintf(stderr, "[CLAMP] %s %d %llu %u\n", __PRETTY_FUNCTION__, __LINE__, *(unsigned long long*)(args[curArgSlot]), *(unsigned*)(((unsigned long long*)(args[curArgSlot])+1)));
+            }
+            */
             arg++;
         }
         // AV -> NullRef translation is NYI for the interpreter,
@@ -9906,7 +9973,9 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
             if (sz > 8)
             {
                 void* srcPtr = OpStackGet<void*>(argsBase + arg);
+                fprintf(stderr, "[CLAMP] %s %d %d %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, arg, curArgSlot, srcPtr, args, &args[curArgSlot]);
                 args[curArgSlot] = PtrToArgSlot(srcPtr);
+                fprintf(stderr, "[CLAMP] %s %d %llu %u %p\n", __PRETTY_FUNCTION__, __LINE__, *(unsigned long long*)srcPtr, *(unsigned*)(((unsigned long long*)srcPtr)+1), args);
                 if (!IsInLargeStructLocalArea(srcPtr))
                     largeStructSpaceToPop += sz;
             }
@@ -9916,6 +9985,14 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
             }
             break;
         }
+        /*
+        if (size_t(m_callThisArg) == 0x1 && args[0] == NULL && sigInfo.hasThis())
+        {
+            fprintf(stderr, "[CLAMP] %s %d ASSIGN\n", __PRETTY_FUNCTION__, __LINE__);
+            args[0] = args[curArgSlot];
+            argTypes[0] = argIt;
+        }
+        */
         argTypes[curArgSlot] = argIt;
         curArgSlot++;
     }
@@ -9945,7 +10022,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
 
         Object** thisArgHnd = NULL;
         ARG_SLOT nullThisArg = NULL;
-        if (sigInfo.hasThis())
+        if (sigInfo.hasThis() && hasThis)
         {
             if (m_callThisArg != NULL)
             {
@@ -10095,6 +10172,7 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
         if (size_t(m_callThisArg) == 0x1)
         {
             _ASSERTE_MSG(sigInfo.retType == CORINFO_TYPE_VOID, "Constructor for var-sized object becomes factory method that returns result.");
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
             OpStackSet<Object*>(m_curStackHt, reinterpret_cast<Object*>(retVals[0]));
             OpStackTypeSet(m_curStackHt, InterpreterType(CORINFO_TYPE_CLASS));
             m_curStackHt++;

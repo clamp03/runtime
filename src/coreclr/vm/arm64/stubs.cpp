@@ -1169,9 +1169,9 @@ void StubLinkerCPU::EmitProlog(unsigned short cIntRegArgs, unsigned short cVecRe
     unsigned short numberOfEntriesOnStack  = 2 + cIntRegArgs + cVecRegArgs + cCalleeSavedRegs; // 2 for fp, lr
 
     // Stack needs to be 16 byte (2 qword) aligned. Compute the required padding before saving it
-    unsigned short totalPaddedFrameSize = static_cast<unsigned short>(ALIGN_UP(cbStackSpace + numberOfEntriesOnStack *sizeof(void*), 2*sizeof(void*)));
+    unsigned short totalPaddedFrameSize = static_cast<unsigned short>(ALIGN_UP(cbStackSpace + numberOfEntriesOnStack * sizeof(void*), 2*sizeof(void*)));
     // The padding is going to be applied to the local stack
-    cbStackSpace =  totalPaddedFrameSize - numberOfEntriesOnStack *sizeof(void*);
+    cbStackSpace =  totalPaddedFrameSize - numberOfEntriesOnStack * sizeof(void*);
 
     // Record the parameters of this prolog so that we can generate a matching epilog and unwind info.
     DescribeProlog(cIntRegArgs, cVecRegArgs, cCalleeSavedRegs, cbStackSpace);

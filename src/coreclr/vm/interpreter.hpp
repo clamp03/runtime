@@ -55,6 +55,7 @@ inline void Interpreter::LdFromMemAddr(void* addr, InterpreterType tp)
             void* ptr = LargeStructOperandStackPush(sz);
             memcpy(ptr, addr, sz);
             OpStackSet<void*>(stackHt, ptr);
+            fprintf(stderr, "[CLAMP] %s %d %lu\n", __PRETTY_FUNCTION__, __LINE__, sz);
         }
         else
         {
@@ -75,6 +76,7 @@ inline void Interpreter::LdFromMemAddr(void* addr, InterpreterType tp)
     if (sz == 4)
     {
         OpStackSet<INT32>(stackHt, *reinterpret_cast<INT32*>(addr));
+        fprintf(stderr, "[CLAMP] %s %d LdArg %p\n", __PRETTY_FUNCTION__, __LINE__, *reinterpret_cast<INT32*>(addr));
     }
     else if (sz == 1)
     {
@@ -91,6 +93,7 @@ inline void Interpreter::LdFromMemAddr(void* addr, InterpreterType tp)
     else if (sz == 8)
     {
         OpStackSet<INT64>(stackHt, *reinterpret_cast<INT64*>(addr));
+        fprintf(stderr, "[CLAMP] %s %d LdArg %p\n", __PRETTY_FUNCTION__, __LINE__, (void*)*reinterpret_cast<INT64*>(addr));
     }
     else
     {
@@ -193,6 +196,8 @@ void Interpreter::StLoc(int locNum)
         memcpy(addr, srcAddr, sz);
         LargeStructOperandStackPop(sz, srcAddr);
         fprintf(stderr, "[CLAMP] %s %d %d STLOC %llu\n", __PRETTY_FUNCTION__, __LINE__, sz, ((unsigned long long*)addr)[1]);
+        fprintf(stderr, "[CLAMP] %s %d %d STLOC %llu\n", __PRETTY_FUNCTION__, __LINE__, sz, ((unsigned long long*)addr)[0]);
+        fprintf(stderr, "[CLAMP] %s %d STLOC %p\n", __PRETTY_FUNCTION__, __LINE__, srcAddr);
     }
     else
     {

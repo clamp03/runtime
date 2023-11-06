@@ -2518,6 +2518,7 @@ HCIMPLEND
 HCIMPL1(StringObject*, AllocateString_MP_FastPortable, DWORD stringLength)
 {
     FCALL_CONTRACT;
+    fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, stringLength);
 
     do
     {

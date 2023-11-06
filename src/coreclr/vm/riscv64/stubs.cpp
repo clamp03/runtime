@@ -1104,7 +1104,7 @@ void StubLinkerCPU::EmitJumpRegister(IntReg regTarget)
     Emit32(0x00000067 | (regTarget << 15));
 }
 
-void StubLinkerCPU::EmitProlog(unsigned short cIntRegArgs, unsigned short cFpRegArgs, unsigned short cbStackSpace)
+void StubLinkerCPU::EmitProlog(unsigned short cIntRegArgs, unsigned short cFpRegArgs, unsigned short cbStackSpace, bool skipThis)
 {
     _ASSERTE(!m_fProlog);
 
@@ -1114,6 +1114,11 @@ void StubLinkerCPU::EmitProlog(unsigned short cIntRegArgs, unsigned short cFpReg
     unsigned short totalPaddedFrameSize = static_cast<unsigned short>(ALIGN_UP(cbStackSpace + numberOfEntriesOnStack * sizeof(void*), 2 * sizeof(void*)));
     // The padding is going to be applied to the local stack
     cbStackSpace =  totalPaddedFrameSize - numberOfEntriesOnStack * sizeof(void*);
+    if (cbStackSpace != 0 && cbStackSpace != 2)
+    {
+        fprintf(stderr, "[CLAMP] %s %d %u\n", __PRETTY_FUNCTION__, __LINE__, cbStackSpace);
+    }
+    fprintf(stderr, "[CLAMP] %s %d SIZE %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, totalPaddedFrameSize, cbStackSpace, numberOfEntriesOnStack, numberOfEntriesOnStack * sizeof(void*));
 
     // Record the parameters of this prolog so that we can generate a matching epilog and unwind info.
     DescribeProlog(cIntRegArgs, cFpRegArgs, cbStackSpace);
@@ -1188,8 +1193,10 @@ void StubLinkerCPU::EmitProlog(unsigned short cIntRegArgs, unsigned short cFpReg
     // 5. Store int argument registers
     cbOffset += cFpRegArgs * sizeof(void*);
     _ASSERTE(cIntRegArgs <= 8);
+    fprintf(stderr, "[CLAMP] %s %d SKIP THIS %d\n", __PRETTY_FUNCTION__, __LINE__, skipThis);
     for (unsigned short i = 0 ; i < cIntRegArgs; i++)
-        EmitStore(IntReg(i + 10), RegSp, cbOffset + i * sizeof(void*));
+        EmitStore(IntReg(i + 10 + (skipThis ? 1 : 0)), RegSp, cbOffset + i * sizeof(void*));
+    fprintf(stderr, "[CLAMP] %s %d FP %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, cFpRegArgs, cIntRegArgs, cbOffset);
 }
 
 void StubLinkerCPU::EmitEpilog()

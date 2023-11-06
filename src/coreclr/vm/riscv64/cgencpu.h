@@ -381,7 +381,8 @@ public:
     void EmitStore(FloatReg src, IntReg destAddr, int offset = 0);
     void EmitProlog(unsigned short cIntRegArgs,
                     unsigned short cFpRegArgs,
-                    unsigned short cbStackSpace = 0);
+                    unsigned short cbStackSpace = 0,
+                    bool skipThis = false);
 
     void EmitEpilog();
     void EmitRet();
