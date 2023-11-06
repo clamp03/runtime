@@ -757,6 +757,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
             || s_InterpretMethsExclude.contains(methName, clsName, info->args.pSig))
         {
             TRACE_SKIPPED(clsName, methName, "not in set of methods to interpret");
+            fprintf(stderr, clsName, methName, "not in set of methods to interpret");
             return CORJIT_SKIPPED;
         }
 
@@ -765,6 +766,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
             || methHash > s_InterpretMethHashMax.val(CLRConfig::INTERNAL_InterpreterMethHashMax))
         {
             TRACE_SKIPPED(clsName, methName, "hash not within range to interpret");
+            fprintf(stderr, clsName, methName, "hash not within range to interpret");
             return CORJIT_SKIPPED;
         }
 
@@ -774,6 +776,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         if (pMD->IsILStub())
         {
             TRACE_SKIPPED(clsName, methName, "interop stubs not supported");
+            fprintf(stderr, clsName, methName, "interop stubs not supported");
             return CORJIT_SKIPPED;
         }
         else
@@ -782,6 +785,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
         if (!s_InterpreterDoLoopMethods && MethodMayHaveLoop(info->ILCode, info->ILCodeSize))
         {
             TRACE_SKIPPED(clsName, methName, "has loop, not interpreting loop methods.");
+            fprintf(stderr, clsName, methName, "has loop, not interpreting loop methods.");
             return CORJIT_SKIPPED;
         }
 
@@ -792,6 +796,7 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
                 || s_interpreterStubNum > s_InterpreterStubMax.val(CLRConfig::INTERNAL_InterpreterStubMax))
         {
             TRACE_SKIPPED(clsName, methName, "stub num not in range, not interpreting.");
+            fprintf(stderr, clsName, methName, "stub num not in range, not interpreting.");
             return CORJIT_SKIPPED;
         }
         /*
@@ -1653,8 +1658,20 @@ CorJitResult Interpreter::GenerateInterpreterStub(CEEInfo* comp,
                 ((info->args.retType == CORINFO_TYPE_VALUECLASS || info->args.retType == CORINFO_TYPE_REFANY) ? getClassSize(info->args.retTypeClass) : 0 ));
         UINT stackFrameSize  = argState.numFPRegArgSlots;
 
+#define METHOD__STRING__CTORF_FIRST METHOD__STRING__CTORF_CHARARRAY
+#define NumberOfStringConstructors 9
+        for (int i = 0; i < NumberOfStringConstructors; i++)
+        {
+            MethodDesc* ctor = CoreLibBinder::GetMethod((BinderMethodID)(METHOD__STRING__CTORF_FIRST + i));
+            _ASSERTE(pMD != NULL);
+            if (pMD == ctor)
+            {
+                skipThis = true;
+                break;
+            }
+        }
 
-        sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots, hasTwoRetSlots ? 2 * sizeof(void*) : 0, pMD->IsStatic() && (strncmp(pMD->GetName(), "Ctor", 4) == 0));
+        sl.EmitProlog(argState.numRegArgs, argState.numFPRegArgSlots, hasTwoRetSlots ? 2 * sizeof(void*) : 0, skipThis);
         fprintf(stderr, "[CLAMP %s %d TT %s %d %d 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, pMD->GetName(), interpMethInfo->GetFlag<InterpreterMethodInfo::Flag_hasThisArg>(), pMD->IsStatic(), info->args.callConv, argState.numRegArgs);
 
 #if INTERP_ILSTUBS
@@ -9633,8 +9650,13 @@ void Interpreter::DoCallWork(bool virtualCall, void* thisArg, CORINFO_RESOLVED_T
         _ASSERTE(m_callThisArg == NULL);  // "m_callThisArg" non-null only for .ctor, which are not callvirts.
 
         CorInfoType argCIT = OpStackTypeGet(argsBase + arg).ToCorInfoType();
+        /*
         if (argCIT != CORINFO_TYPE_BYREF)
+        {
+            fprintf(stderr, "[CLAMP] %s %d TYPE_BYREF == 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, argCIT, arg);
             VerificationError("This arg of constrained call must be managed pointer.");
+        }
+        */
 
         // We only cache for the CORINFO_NO_THIS_TRANSFORM case, so we may assume that if we have a cached call site,
         // there's no thisTransform to perform.
