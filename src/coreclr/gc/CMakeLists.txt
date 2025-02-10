@@ -13,6 +13,7 @@ set(GC_SOURCES
   gcscan.cpp
   gcsvr.cpp
   gcwks.cpp
+  gcnew.cpp
   handletable.cpp
   handletablecore.cpp
   handletablescan.cpp

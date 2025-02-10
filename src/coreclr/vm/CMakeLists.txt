@@ -475,6 +475,7 @@ set(GC_SOURCES_WKS
     ../gc/gcscan.cpp
     ../gc/gcsvr.cpp
     ../gc/gcwks.cpp
+    ../gc/gcnew.cpp
     ../gc/gchandletable.cpp
     ../gc/gceesvr.cpp
     ../gc/gceewks.cpp
