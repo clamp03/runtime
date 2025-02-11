@@ -177,6 +177,12 @@ namespace SVR {
 }
 #endif // defined(FEATURE_SVR_GC)
 
+namespace NGC {
+    ::IGCHeapInternal* CreateGCHeap();
+    class GCHeap;
+    class gc_heap;
+}
+
 #ifdef STRESS_HEAP
 #define IN_STRESS_HEAP(x) x
 #define STRESS_HEAP_ARG(x) ,x
@@ -241,11 +247,11 @@ struct alloc_context : gc_alloc_context
     }
 
     // How the alloc_count field is organized -
-    // 
+    //
     // high 16-bits are for the handle info, out of which
-    // high 10 bits store the cpu index. 
+    // high 10 bits store the cpu index.
     // low 6 bits store the number of handles allocated so far (before the next reset).
-    // 
+    //
     // low 16-bits are for the actual alloc_count used by balance_heaps
     inline void init_alloc_count()
     {

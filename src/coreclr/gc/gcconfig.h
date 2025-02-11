@@ -64,6 +64,7 @@ public:
 // is the first parameter of the *_CONFIG macros below.
 #define GC_CONFIGURATION_KEYS \
     BOOL_CONFIG  (ServerGC,                  "gcServer",                  "System.GC.Server",                  false,              "Whether we should be using Server GC")                                                   \
+    BOOL_CONFIG  (NewGC,                     "gcNew",                     "System.GC.New",                     false,              "Whether we should be using New GC")                                                       \
     BOOL_CONFIG  (ConcurrentGC,              "gcConcurrent",              "System.GC.Concurrent",              true,               "Whether we should be using Concurrent GC")                                                \
     BOOL_CONFIG  (ConservativeGC,            "gcConservative",            NULL,                                false,              "Enables/Disables conservative GC")                                                       \
     BOOL_CONFIG  (ForceCompact,              "gcForceCompact",            NULL,                                false,              "When set to true, always do compacting GC")                                              \
@@ -156,7 +157,7 @@ class GCConfig
   private: static bool s_##name;                                  \
   private: static bool s_##name##Provided;                        \
   private: static bool s_Updated##name;
-  
+
 #define INT_CONFIG(name, unused_private_key, unused_public_key, unused_default, unused_doc) \
   public: static int64_t Get##name();                            \
   public: static int64_t Get##name(int64_t defaultValue);        \

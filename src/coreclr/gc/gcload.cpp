@@ -125,6 +125,12 @@ GC_Initialize(
     }
     else
 #endif
+    if (GCConfig::GetNewGC())
+    {
+        g_gc_heap_type = GC_HEAP_NEW;
+        heap = NGC::CreateGCHeap();
+    }
+    else
     {
         g_gc_heap_type = GC_HEAP_WKS;
         heap = WKS::CreateGCHeap();
