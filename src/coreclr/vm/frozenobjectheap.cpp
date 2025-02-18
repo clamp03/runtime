@@ -178,6 +178,7 @@ void FrozenObjectSegment::RegisterOrUpdate(uint8_t* current, size_t sizeCommited
 
     if (m_pCurrentRegistered == nullptr)
     {
+#ifndef FEATURE_NEW_GC
         segment_info si;
         si.pvMem = m_pStart;
         si.ibFirstObject = sizeof(ObjHeader);
@@ -193,14 +194,17 @@ void FrozenObjectSegment::RegisterOrUpdate(uint8_t* current, size_t sizeCommited
         {
             ThrowOutOfMemory();
         }
+#endif // FEATURE_NEW_GC
         m_pCurrentRegistered = current;
     }
     else
     {
         if (current > m_pCurrentRegistered)
         {
+#ifndef FEATURE_NEW_GC
             GCHeapUtilities::GetGCHeap()->UpdateFrozenSegment(
                 m_SegmentHandle, current, m_pStart + sizeCommited);
+#endif // FEATURE_NEW_GC
             m_pCurrentRegistered = current;
         }
         else

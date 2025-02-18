@@ -7,14 +7,21 @@
 
 #include "common.h"
 #include "gcenv.h"
+
 #include "gc.h"
+#include "gceventstatus.h"
 
 namespace NGC {
 
 #include "gcimpl.h"
+#include "gcpriv.h"
 IGCHeapInternal* CreateGCHeap() {
     return new(nothrow) GCHeap();
 }
+
+uint8_t* MEM = NULL;
+size_t   MEM_SIZE = 1024 * 1024 * 10;
+size_t   MEM_CURR = 0;
 
 // gcee.cpp
 void GCHeap::UpdatePreGCCounters()
@@ -102,7 +109,7 @@ void GCHeap::WaitUntilConcurrentGCComplete()
 
 bool GCHeap::IsConcurrentGCInProgress()
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return false;
 }
 
@@ -118,7 +125,7 @@ void GCHeap::DiagDescrGenerations(gen_walk_fn fn, void *context)
 
 segment_handle GCHeap::RegisterFrozenSegment(segment_info *pseginfo)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return NULL;
 }
 
@@ -129,7 +136,7 @@ void GCHeap::UnregisterFrozenSegment(segment_handle seg)
 
 bool GCHeap::IsInFrozenSegment(Object *object)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return false;
 }
 
@@ -140,8 +147,8 @@ void GCHeap::UpdateFrozenSegment(segment_handle seg, uint8_t* allocated, uint8_t
 
 bool GCHeap::RuntimeStructuresValid()
 {
-    assert(!"Not Implemented Yet");
-    return false;
+    // assert(!"Not Implemented Yet");
+    return true;
 }
 
 void GCHeap::SetSuspensionPending(bool fSuspensionPending)
@@ -151,12 +158,12 @@ void GCHeap::SetSuspensionPending(bool fSuspensionPending)
 
 void GCHeap::ControlEvents(GCEventKeyword keyword, GCEventLevel level)
 {
-    assert(!"Not Implemented Yet");
+    GCEventStatus::Set(GCEventProvider_Default, keyword, level);
 }
 
 void GCHeap::ControlPrivateEvents(GCEventKeyword keyword, GCEventLevel level)
 {
-    assert(!"Not Implemented Yet");
+    GCEventStatus::Set(GCEventProvider_Private, keyword, level);
 }
 
 uint64_t GCHeap::GetGenerationBudget(int generation)
@@ -184,13 +191,19 @@ HRESULT GCHeap::StaticShutdown()
 
 HRESULT GCHeap::Init(size_t hn)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return S_OK;
 }
 
 HRESULT GCHeap::Initialize()
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
+    if (MEM == NULL)
+    {
+        void* allocated = malloc(MEM_SIZE);
+        MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
+        // fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p\n", MEM, MEM + MEM_SIZE);
+    }
     return S_OK;
 }
 
@@ -212,7 +225,7 @@ void GCHeap::SetYieldProcessorScalingFactor(float scalingFactor)
 
 unsigned int GCHeap::WhichGeneration(Object* object)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return 0;
 }
 
@@ -224,7 +237,7 @@ enable_no_gc_region_callback_status GCHeap::EnableNoGCRegionCallback(NoGCRegionC
 
 FinalizerWorkItem* GCHeap::GetExtraWorkForFinalization()
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return NULL;
 }
 
@@ -242,14 +255,15 @@ bool GCHeap::IsEphemeral(Object* object)
 
 Object * GCHeap::NextObj(Object * object)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return NULL;
 }
 
 bool GCHeap::IsHeapPointer(void* vpObject, bool small_heap_only)
 {
-    assert(!"Not Implemented Yet");
-    return false;
+    // assert(!"Not Implemented Yet");
+    // fprintf(stderr, "[CLAMP] GCHeap::IsHeapPointer %p %d\n", vpObject, vpObject >= (void*)MEM && vpObject < (void*)(MEM + MEM_SIZE));
+    return vpObject >= (void*)MEM && vpObject < (void*)(MEM + MEM_SIZE);
 }
 
 void GCHeap::Promote(Object** ppObject, ScanContext* sc, uint32_t flags)
@@ -265,7 +279,6 @@ void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
 
 /*static*/ bool GCHeap::IsLargeObject(Object *pObj)
 {
-    assert(!"Not Implemented Yet");
     return false;
 }
 
@@ -277,13 +290,30 @@ bool GCHeap::StressHeap(gc_alloc_context * context)
 
 Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
-    assert(!"Not Implemented Yet");
-    return NULL;
+    // assert(!"Not Implemented Yet");
+    if (flags & GC_ALLOC_ALIGN8)
+    {
+        size = Align(size) + Align(sizeof(ObjHeader) + 4);
+    }
+    else
+    {
+        size = Align(size) + Align(sizeof(ObjHeader));
+    }
+    assert(MEM_CURR + size < MEM_SIZE);
+
+    uint8_t* ret = ((uint8_t*)MEM + MEM_CURR + Align(sizeof(Object)));
+    if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)
+    {
+        ret += 4;
+    }
+    MEM_CURR += size;
+    // fprintf(stderr, "[CLAMP] GCHeap::Alloc %p Size 0x%zx CURR: 0x%zx\n", ret, size, MEM_CURR);
+    return (Object*)ret;
 }
 
 void GCHeap::FixAllocContext(gc_alloc_context* context, void* arg, void *heap)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
 }
 
 Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
@@ -306,7 +336,7 @@ size_t GCHeap::GarbageCollectTry(int generation, BOOL low_memory_p, int mode)
 
 unsigned GCHeap::GetGcCount()
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return 0;
 }
 
@@ -330,7 +360,7 @@ uint64_t GCHeap::GetTotalAllocatedBytes()
 
 int GCHeap::CollectionCount(int generation, int get_bgc_fgc_count)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return 0;
 }
 
@@ -354,7 +384,6 @@ int GCHeap::GetNumberOfHeaps()
 
 int GCHeap::GetHomeHeapNumber()
 {
-    assert(!"Not Implemented Yet");
     return 0;
 }
 
@@ -463,7 +492,7 @@ int GCHeap::EndNoGCRegion()
 
 void GCHeap::PublishObject(uint8_t* Obj)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
 }
 
 size_t GCHeap::GetValidSegmentSize(bool large_seg)
@@ -503,7 +532,7 @@ bool GCHeap::RegisterForFinalization(int gen, Object* obj)
 
 void GCHeap::SetFinalizationRun(Object* obj)
 {
-    assert(!"Not Implemented Yet");
+    //assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagWalkObject(Object* obj, walk_fn fn, void* context)

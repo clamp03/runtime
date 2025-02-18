@@ -669,11 +669,11 @@ RETAIL_CONFIG_DWORD_INFO(UNSUPPORTED_LTTng, W("LTTng"), 1, "If DOTNET_LTTng is s
 // Executable code
 //
 // TODO: https://github.com/dotnet/runtime/issues/103465
-#ifdef TARGET_RISCV64
+#if defined(TARGET_RISCV64) || defined(FEATURE_NEW_GC)
 RETAIL_CONFIG_DWORD_INFO(EXTERNAL_EnableWriteXorExecute, W("EnableWriteXorExecute"), 0, "Enable W^X for executable memory.");
 #else
 RETAIL_CONFIG_DWORD_INFO(EXTERNAL_EnableWriteXorExecute, W("EnableWriteXorExecute"), 1, "Enable W^X for executable memory.");
-#endif // TARGET_RISCV64
+#endif // TARGET_RISCV64 || FEATURE_NEW_GC
 
 #ifdef FEATURE_GDBJIT
 ///

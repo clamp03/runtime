@@ -565,6 +565,7 @@ VOID Object::ValidateInner(BOOL bDeep, BOOL bVerifyNextHeader, BOOL bVerifySyncB
 
         // noRangeChecks depends on initial values being FALSE
         BOOL bSmallObjectHeapPtr = FALSE, bLargeObjectHeapPtr = FALSE;
+#ifndef FEATURE_NEW_GC // Disable RangeChecks temporary.
         if (!noRangeChecks)
         {
             bSmallObjectHeapPtr = GCHeapUtilities::GetGCHeap()->IsHeapPointer(this, true);
@@ -573,6 +574,7 @@ VOID Object::ValidateInner(BOOL bDeep, BOOL bVerifyNextHeader, BOOL bVerifySyncB
 
             CHECK_AND_TEAR_DOWN(bSmallObjectHeapPtr || bLargeObjectHeapPtr);
         }
+#endif
 
         lastTest = 3;
 
