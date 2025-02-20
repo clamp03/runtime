@@ -293,22 +293,24 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     // assert(!"Not Implemented Yet");
     if (flags & GC_ALLOC_ALIGN8)
     {
-        size = Align(size) + Align(sizeof(ObjHeader) + 4);
+        size = Align(size) + Align(sizeof(ObjHeader) + 8);
     }
     else
     {
-        size = Align(size) + Align(sizeof(ObjHeader));
+        size = Align(size) + Align(sizeof(ObjHeader) + 4);
     }
     assert(MEM_CURR + size < MEM_SIZE);
+    fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
-    uint8_t* ret = ((uint8_t*)MEM + MEM_CURR + Align(sizeof(Object)));
+    uint8_t* ret = ((uint8_t*)MEM + MEM_CURR + Align(sizeof(Object) + 4));
     if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)
     {
         ret += 4;
     }
+    *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
     MEM_CURR += size;
     // fprintf(stderr, "[CLAMP] GCHeap::Alloc %p Size 0x%zx CURR: 0x%zx\n", ret, size, MEM_CURR);
-    return (Object*)ret;
+    return (Object*)(ret - 8);
 }
 
 void GCHeap::FixAllocContext(gc_alloc_context* context, void* arg, void *heap)

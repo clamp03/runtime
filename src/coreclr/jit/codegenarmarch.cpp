@@ -1939,6 +1939,14 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
         ins = genGetVolatileLdStIns(ins, targetReg, tree, &emitBarrier);
     }
 
+#ifdef FEATURE_NEW_GC
+    if (JitConfig.JitNewGC())
+    {
+        fprintf(stderr, "[CLAMP] Test JIT\n");
+        //GetEmitter()->emitInsLoadStoreOp(INS_ldr, EA_PTRSIZE, targetReg, tree);
+    }
+    else
+#endif // FEATURE_NEW_GC
     GetEmitter()->emitInsLoadStoreOp(ins, emitActualTypeSize(type), targetReg, tree);
 
     if (emitBarrier)
