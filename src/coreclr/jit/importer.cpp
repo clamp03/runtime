@@ -7153,6 +7153,20 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     optMethodFlags |= OMF_HAS_ARRAYREF;
                 }
 
+#ifdef FEATURE_NEW_GC
+                if (JitConfig.JitNewGC())
+                {
+                    if (opcode == CEE_LDELEM_I || opcode == CEE_LDELEM_I4)
+                    {
+                        fprintf(stderr, "[CLAMP] HELP_ARR_LD\n");
+                        //op1 = impAppendTree(gtNewHelperCallNode(CORINFO_HELP_ARR_LD, lclTyp, op1, op2), CHECK_SPILL_NONE, impCurStmtDI );
+                        op1 = gtNewHelperCallNode(CORINFO_HELP_ARR_LD, lclTyp, op1, op2);
+                        impPushOnStack(op1, tiRetVal);
+                        break;
+                    }
+                }
+#endif // FEATURE_NEW_GC
+
                 op1 = gtNewArrayIndexAddr(op1, op2, lclTyp, ldelemClsHnd);
 
                 if (opcode != CEE_LDELEMA)
@@ -7258,6 +7272,18 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     block->SetFlags(BBF_HAS_IDX_LEN);
                     optMethodFlags |= OMF_HAS_ARRAYREF;
                 }
+
+#ifdef FEATURE_NEW_GC
+                if (JitConfig.JitNewGC())
+                {
+                    if (opcode == CEE_STELEM_I || opcode == CEE_STELEM_I4)
+                    {
+                        fprintf(stderr, "[CLAMP] HELP_ARR_ST\n");
+                        op1 = gtNewHelperCallNode(CORINFO_HELP_ARR_ST, TYP_VOID, op3, op1, op2);
+                        goto SPILL_APPEND;
+                    }
+                }
+#endif // FEATURE_NEW_GC
 
                 // Create the index address node.
                 op1 = gtNewArrayIndexAddr(op3, op1, lclTyp, stelemClsHnd);

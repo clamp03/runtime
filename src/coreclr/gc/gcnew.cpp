@@ -300,7 +300,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         size = Align(size) + Align(sizeof(ObjHeader) + 4);
     }
     assert(MEM_CURR + size < MEM_SIZE);
-    fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
+    // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
     uint8_t* ret = ((uint8_t*)MEM + MEM_CURR + Align(sizeof(Object) + 4));
     if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)

@@ -28,7 +28,7 @@
     LEAF_ENTRY JIT_WriteBarrier, _TEXT
         str r1, [r0]
         bx lr
-    // .space (0x84)
+        .space (0x84)
     LEAF_END_MARKED JIT_WriteBarrier, _TEXT
 
         .align 4
@@ -36,7 +36,7 @@
         dmb
         str r1, [r0]
         bx lr
-    //.space (0x9C)
+        .space (0x9C)
     LEAF_END_MARKED JIT_CheckedWriteBarrier, _TEXT
 
         .align 4
@@ -46,7 +46,7 @@
         add r0, #4
         add r1, #4
         bx lr
-    // .space (0xA0)
+       .space (0xA0)
     LEAF_END_MARKED JIT_ByRefWriteBarrier , _TEXT
 
     LEAF_ENTRY JIT_PatchedWriteBarrierLast, _TEXT

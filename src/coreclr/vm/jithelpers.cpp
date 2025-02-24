@@ -1251,6 +1251,25 @@ HCIMPL2(Object*, JIT_Box, CORINFO_CLASS_HANDLE type, void* unboxedData)
 }
 HCIMPLEND
 
+HCIMPL3(void, JIT_BarrierArrSt, Object* arr, uint32_t index, int32_t value)
+{
+    ArrayBase* arrObj = (ArrayBase*)arr;
+    if (index >= arrObj->GetNumComponents())
+        COMPlusThrow(kOverflowException);
+    fprintf(stderr, "[CLAMP] JIT_BarrierArrSt\n");
+    *((int32_t*)arrObj + 2 + index) = value;
+}
+HCIMPLEND
+
+HCIMPL2(int32_t, JIT_BarrierArrLd, Object* arr, uint32_t index)
+{
+    ArrayBase* arrObj = (ArrayBase*)arr;
+    if (index >= arrObj->GetNumComponents())
+        COMPlusThrow(kOverflowException);
+    fprintf(stderr, "[CLAMP] JIT_BarrierArrLd\n");
+    return *(((int32_t*)arrObj) + 2 + index); // 2: 1 for m_dwLength, 1 for padding
+}
+HCIMPLEND
 /*************************************************************/
 HCIMPL2(BOOL, JIT_IsInstanceOfException, CORINFO_CLASS_HANDLE type, Object* obj)
 {

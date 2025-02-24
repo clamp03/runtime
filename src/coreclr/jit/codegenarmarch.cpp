@@ -1942,8 +1942,9 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
 #ifdef FEATURE_NEW_GC
     if (JitConfig.JitNewGC())
     {
-        fprintf(stderr, "[CLAMP] Test JIT\n");
+        //fprintf(stderr, "[CLAMP] Test JIT\n");
         //GetEmitter()->emitInsLoadStoreOp(INS_ldr, EA_PTRSIZE, targetReg, tree);
+        GetEmitter()->emitInsLoadStoreOp(ins, emitActualTypeSize(type), targetReg, tree);
     }
     else
 #endif // FEATURE_NEW_GC
