@@ -71,11 +71,11 @@ ASMCONSTANTS_C_ASSERT(MethodTable__m_ElementType == offsetof(MethodTable, m_Elem
 #define SIZEOF__MethodTable             DBG_FRE(0x2c, 0x28)
 ASMCONSTANTS_C_ASSERT(SIZEOF__MethodTable == sizeof(MethodTable));
 
-#define ArrayBase__m_NumComponents     0x4
-ASMCONSTANTS_C_ASSERT(ArrayBase__m_NumComponents == offsetof(ArrayBase, m_NumComponents));
+#define ArrayBaseInternal__m_NumComponents     0x4
+ASMCONSTANTS_C_ASSERT(ArrayBaseInternal__m_NumComponents == offsetof(ArrayBaseInternal, m_NumComponents));
 
-#define PtrArray__m_Array              0x8
-ASMCONSTANTS_C_ASSERT(PtrArray__m_Array == offsetof(PtrArray, m_Array));
+#define PtrArrayInternal__m_Array              0x8
+ASMCONSTANTS_C_ASSERT(PtrArrayInternal__m_Array == offsetof(PtrArrayInternal, m_Array));
 
 #define TypeHandle_CanCast 0x1 // TypeHandle::CanCast
 

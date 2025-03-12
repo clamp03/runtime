@@ -571,7 +571,7 @@ OBJECTREF AllocateSzArray(MethodTable* pArrayMT, INT32 cElements, GC_ALLOC_FLAGS
     }
 
     // Initialize Object
-    orArray->m_NumComponents = cElements;
+    orArray->SetNumComponents(cElements);
 
     PublishObjectAndNotify(orArray, flags);
     return ObjectToOBJECTREF((Object*)orArray);
@@ -636,7 +636,7 @@ OBJECTREF TryAllocateFrozenSzArray(MethodTable* pArrayMT, INT32 cElements)
     ArrayBase* orArray = static_cast<ArrayBase*>(
         foh->TryAllocateObject(pArrayMT, PtrAlign(totalSize), [](Object* obj, void* elemCntPtr){
             // Initialize newly allocated object before publish
-            static_cast<ArrayBase*>(obj)->m_NumComponents = *static_cast<DWORD*>(elemCntPtr);
+            static_cast<ArrayBase*>(obj)->SetNumComponents(*static_cast<DWORD*>(elemCntPtr));
         }, &cElements));
 
     if (orArray == nullptr)
@@ -844,7 +844,7 @@ OBJECTREF AllocateArrayEx(MethodTable *pArrayMT, INT32 *pArgs, DWORD dwNumArgs, 
     }
 
     // Initialize Object
-    orArray->m_NumComponents = cElements;
+    orArray->SetNumComponents(cElements);
     if (kind == ELEMENT_TYPE_ARRAY)
     {
         INT32 *pCountsPtr      = (INT32 *) orArray->GetBoundsPtr();

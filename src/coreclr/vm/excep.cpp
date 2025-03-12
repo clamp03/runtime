@@ -10518,7 +10518,7 @@ void ExceptionNotifications::DeliverNotificationInternal(ExceptionNotificationHa
 
             for (UINT_PTR i=0; i<cnt; i++)
             {
-                gc.oInnerDelegate = gc.arrDelegates->m_Array[i];
+                gc.oInnerDelegate = ((PtrArrayInternal*)gc.arrDelegates->m_pObj)->m_Array[i];
                 ExceptionNotifications::DeliverExceptionNotification(notificationType, &gc.oInnerDelegate, &gc.oCurAppDomain, &gc.oEventArgs);
             }
         }

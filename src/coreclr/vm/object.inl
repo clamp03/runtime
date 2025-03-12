@@ -27,7 +27,17 @@ inline DWORD Object::GetNumComponents()
     // Yes, we may not even be an array, which means we are reading some of the object's memory - however,
     // ComponentSize will multiply out this value.  Therefore, m_NumComponents must be the first field in
     // ArrayBase.
-    return dac_cast<PTR_ArrayBase>(this)->m_NumComponents;
+    return dac_cast<PTR_ArrayBase>(this)->GetNumComponents();
+}
+
+inline void Object::SetNumComponents(DWORD num)
+{
+    LIMITED_METHOD_DAC_CONTRACT;
+    // Yes, we may not even be an array, which means we are reading some of the object's memory - however,
+    // ComponentSize will multiply out this value.  Therefore, m_NumComponents must be the first field in
+    // ArrayBase.
+    return dac_cast<PTR_ArrayBase>(this)->SetNumComponents(num);
+
 }
 
 inline SIZE_T Object::GetSize()
@@ -155,7 +165,15 @@ inline DWORD ArrayBase::GetNumComponents() const
 {
     LIMITED_METHOD_CONTRACT;
     SUPPORTS_DAC;
-    return m_NumComponents;
+    return ((ArrayBaseInternal*)m_pObj)->m_NumComponents;
+}
+
+// Total element count for the array
+inline void ArrayBase::SetNumComponents(DWORD num)
+{
+    LIMITED_METHOD_CONTRACT;
+    SUPPORTS_DAC;
+    ((ArrayBaseInternal*)m_pObj)->m_NumComponents = num;
 }
 
 inline /* static */ unsigned ArrayBase::GetDataPtrOffset(MethodTable* pMT)
@@ -240,8 +258,8 @@ inline TypeHandle Object::GetTypeHandle()
     }
     CONTRACTL_END
 
-    _ASSERTE(m_pMethTab == GetGCSafeMethodTable());
-    return TypeHandle(m_pMethTab);
+    _ASSERTE(RawGetMethodTable() == GetGCSafeMethodTable());
+    return TypeHandle(RawGetMethodTable());
 }
 
 inline TypeHandle Object::GetGCSafeTypeHandle() const

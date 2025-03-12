@@ -33,15 +33,15 @@ void FinalizeWeakReference(Object* obj)
     const uintptr_t HandleTagBits = 3;
 
     WeakReferenceObject* weakRefObj = (WeakReferenceObject*)obj;
-    OBJECTHANDLE handle = (OBJECTHANDLE)(weakRefObj->m_taggedHandle & ~HandleTagBits);
-    HandleType handleType = (weakRefObj->m_taggedHandle & 2) ?
+    OBJECTHANDLE handle = (OBJECTHANDLE)(weakRefObj->GetTaggedHandle() & ~HandleTagBits);
+    HandleType handleType = (weakRefObj->GetTaggedHandle() & 2) ?
         HandleType::HNDTYPE_STRONG :
-        (weakRefObj->m_taggedHandle & 1) ?
+        (weakRefObj->GetTaggedHandle() & 1) ?
         HandleType::HNDTYPE_WEAK_LONG :
         HandleType::HNDTYPE_WEAK_SHORT;
 
     // keep the bit that indicates whether this reference was tracking resurrection, clear the rest.
-    weakRefObj->m_taggedHandle &= (uintptr_t)1;
+    weakRefObj->SetTaggedHandle(weakRefObj->GetTaggedHandle() & (uintptr_t)1);
     GCHandleUtilities::GetGCHandleManager()->DestroyHandleOfType(handle, handleType);
 }
 

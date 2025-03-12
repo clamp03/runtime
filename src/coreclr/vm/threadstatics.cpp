@@ -71,7 +71,7 @@ PTR_VOID GetThreadLocalStaticBaseNoCreate(Thread* pThread, TLSIndex index)
             if (pThreadLocalData->cNonCollectibleTlsData > index.GetIndexOffset())
             {
                 size_t arrayIndex = index.GetIndexOffset() - NUMBER_OF_TLSOFFSETS_NOT_USED_IN_NONCOLLECTIBLE_ARRAY;
-                TADDR arrayTargetAddress = dac_cast<TADDR>(tlsArray) + offsetof(PtrArray, m_Array);
+                TADDR arrayTargetAddress = dac_cast<TADDR>(tlsArray->m_pObj) + offsetof(PtrArrayInternal, m_Array);
 #ifdef DACCESS_COMPILE
                 __ArrayDPtr<_UNCHECKED_OBJECTREF> targetArray = dac_cast< __ArrayDPtr<_UNCHECKED_OBJECTREF> >(arrayTargetAddress);
 #else
@@ -624,7 +624,7 @@ void* GetThreadLocalStaticBase(TLSIndex index)
         if (gcBaseAddresses.pTLSBaseAddress == (TADDR)NULL)
         {
             // Now we need to actually allocate the TLS data block
-            struct 
+            struct
             {
                 PTRARRAYREF ptrRef;
                 OBJECTREF tlsEntry;
@@ -741,9 +741,9 @@ void GetTLSIndexForThreadStatic(MethodTable* pMT, bool gcStatic, TLSIndex* pInde
                     alignment = 4;
                 else if (bytesNeeded >= 2)
                     alignment = 2;
-                else 
+                else
                     alignment = 1;
-                
+
                 uint32_t actualIndexOffset = AlignDown(indexOffsetWithoutAlignment, alignment);
                 uint32_t alignmentAdjust = indexOffsetWithoutAlignment - actualIndexOffset;
                 if (alignmentAdjust <= newBytesAvailable)

@@ -1575,7 +1575,7 @@ ClrDataAccess::GetObjectStringData(CLRDATA_ADDRESS obj, unsigned int count, _Ino
             if (count > needed)
                 count = needed;
 
-            TADDR pszStr = TO_TADDR(obj)+offsetof(StringObject, m_FirstChar);
+            TADDR pszStr = TO_TADDR(str->m_pObj)+offsetof(StringObjectInternal, m_FirstChar);
             ULONG32 bytesRead;
             hr = m_pTarget->ReadVirtual(pszStr, (PBYTE)stringData, count * sizeof(WCHAR), &bytesRead);
             needed = bytesRead / sizeof(WCHAR);
@@ -2921,7 +2921,7 @@ ClrDataAccess::GetGCDynamicAdaptationMode(int* pDynamicAdaptationMode)
     {
         *pDynamicAdaptationMode = -1;
         hr = S_FALSE;
-    }    
+    }
     SOSDacLeave();
     return hr;
 }

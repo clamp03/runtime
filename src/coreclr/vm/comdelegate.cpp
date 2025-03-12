@@ -3127,7 +3127,7 @@ void DistributeUnhandledExceptionReliably(OBJECTREF *pDelegate,
 
             for (DWORD i=0; i<cnt; i++)
             {
-                gc.InnerDelegate = gc.Array->m_Array[i];
+                gc.InnerDelegate = ((PtrArrayInternal*)gc.Array->m_pObj)->m_Array[i];
                 InvokeUnhandledSwallowing(&gc.InnerDelegate, pDomain, &gc.EventArgs);
             }
         }

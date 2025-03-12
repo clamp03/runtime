@@ -125,10 +125,18 @@ struct RCW;
 //     * a pointer to a code:ObjHeader at a negative offset. This is often zero.  It holds information that
 //         any addition information that we might need to attach to arbitrary objects.
 //
+class ObjectInternal
+{
+  public:
+    PTR_MethodTable m_pMethTab;
+
+    friend struct ::cdac_data<ObjectInternal>;
+};
+
 class Object
 {
-  protected:
-    PTR_MethodTable m_pMethTab;
+  public:
+    ObjectInternal* m_pObj;
 
   protected:
     Object() { LIMITED_METHOD_CONTRACT; };
@@ -137,14 +145,14 @@ class Object
   public:
     MethodTable *RawGetMethodTable() const
     {
-        return m_pMethTab;
+        return m_pObj->m_pMethTab;
     }
 
 #ifndef DACCESS_COMPILE
     void RawSetMethodTable(MethodTable *pMT)
     {
         LIMITED_METHOD_CONTRACT;
-        m_pMethTab = pMT;
+        m_pObj->m_pMethTab = pMT;
     }
 
     VOID SetMethodTable(MethodTable *pMT)
@@ -157,7 +165,7 @@ class Object
     {
         WRAPPER_NO_CONTRACT;
         // This function must be used if the allocation occurs on a UOH heap, and the method table might be a collectible type
-        ErectWriteBarrierForMT(&m_pMethTab, pMT);
+        ErectWriteBarrierForMT(&m_pObj->m_pMethTab, pMT);
     }
 #endif //!DACCESS_COMPILE
 
@@ -170,21 +178,21 @@ class Object
 #ifndef DACCESS_COMPILE
         // We should always use GetGCSafeMethodTable() if we're running during a GC.
         // If the mark bit is set then we're running during a GC
-        _ASSERTE((dac_cast<TADDR>(m_pMethTab) & MARKED_BIT) == 0);
+        _ASSERTE((dac_cast<TADDR>(m_pObj->m_pMethTab) & MARKED_BIT) == 0);
 
-        return m_pMethTab;
+        return m_pObj->m_pMethTab;
 #else //DACCESS_COMPILE
 
         //@dbgtodo dharvey Make this a type which supports bitwise and operations
         //when available
-        return PTR_MethodTable((dac_cast<TADDR>(m_pMethTab)) & (~MARKED_BIT));
+        return PTR_MethodTable((dac_cast<TADDR>(m_pObj->m_pMethTab)) & (~MARKED_BIT));
 #endif //DACCESS_COMPILE
     }
 
     DPTR(PTR_MethodTable) GetMethodTablePtr() const
     {
         LIMITED_METHOD_CONTRACT;
-        return dac_cast<DPTR(PTR_MethodTable)>(PTR_HOST_MEMBER_TADDR(Object, this, m_pMethTab));
+        return dac_cast<DPTR(PTR_MethodTable)>(PTR_HOST_MEMBER_TADDR(ObjectInternal, m_pObj, m_pMethTab));
     }
 
     TypeHandle      GetTypeHandle();
@@ -193,6 +201,7 @@ class Object
     static BOOL     SupportsInterface(OBJECTREF pObj, MethodTable *pInterfaceMT);
 
     inline DWORD    GetNumComponents();
+    inline void     SetNumComponents(DWORD num);
     inline SIZE_T   GetSize();
 
     CGCDesc*        GetSlotMap()
@@ -208,14 +217,15 @@ class Object
     PTR_ObjHeader   GetHeader()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return dac_cast<PTR_ObjHeader>(this) - 1;
+        return dac_cast<PTR_ObjHeader>(m_pObj) - 1;
     }
 
     // Get the current address of the object (works for debug refs, too.)
     PTR_BYTE      GetAddress()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return dac_cast<PTR_BYTE>(this);
+        _ASSERTE(!"GetAddress");
+        return dac_cast<PTR_BYTE>(m_pObj);
     }
 
 #ifdef _DEBUG
@@ -355,42 +365,48 @@ class Object
     {
         LIMITED_METHOD_CONTRACT;
         SUPPORTS_DAC;
-        return dac_cast<PTR_BYTE>(this) + sizeof(Object);
+        return dac_cast<PTR_BYTE>(m_pObj) + sizeof(ObjectInternal);
     }
 
     static UINT GetOffsetOfFirstField()
     {
         LIMITED_METHOD_CONTRACT;
+        _ASSERTE(!"GetOffsetOfFirstField");
         return sizeof(Object);
     }
 
     DWORD   GetOffset32(DWORD dwOffset)
     {
         WRAPPER_NO_CONTRACT;
+        _ASSERTE(!"GetOffset32");
         return * PTR_DWORD(GetData() + dwOffset);
     }
 
     USHORT  GetOffset16(DWORD dwOffset)
     {
         WRAPPER_NO_CONTRACT;
+        _ASSERTE(!"GetOffset16");
         return * PTR_USHORT(GetData() + dwOffset);
     }
 
     BYTE    GetOffset8(DWORD dwOffset)
     {
         WRAPPER_NO_CONTRACT;
+        _ASSERTE(!"GetOffset8");
         return * PTR_BYTE(GetData() + dwOffset);
     }
 
     int64_t GetOffset64(DWORD dwOffset)
     {
         WRAPPER_NO_CONTRACT;
+        _ASSERTE(!"GetOffset64");
         return (int64_t) * PTR_ULONG64(GetData() + dwOffset);
     }
 
     void *GetPtrOffset(DWORD dwOffset)
     {
         WRAPPER_NO_CONTRACT;
+        _ASSERTE(!"GetPtrOffset");
         return (void *)(TADDR)*PTR_TADDR(GetData() + dwOffset);
     }
 
@@ -443,9 +459,9 @@ class Object
         // bit is reserved.  So if we want the actual MT pointer during a GC
         // we must zero out the lowest 2 bits on 32-bit and 3 bits on 64-bit.
 #ifdef TARGET_64BIT
-        return dac_cast<PTR_MethodTable>((dac_cast<TADDR>(m_pMethTab)) & ~((UINT_PTR)7));
+        return dac_cast<PTR_MethodTable>((dac_cast<TADDR>(m_pObj->m_pMethTab)) & ~((UINT_PTR)7));
 #else
-        return dac_cast<PTR_MethodTable>((dac_cast<TADDR>(m_pMethTab)) & ~((UINT_PTR)3));
+        return dac_cast<PTR_MethodTable>((dac_cast<TADDR>(m_pObj->m_pMethTab)) & ~((UINT_PTR)3));
 #endif //TARGET_64BIT
     }
 
@@ -462,13 +478,13 @@ class Object
  private:
     VOID ValidateInner(BOOL bDeep, BOOL bVerifyNextHeader, BOOL bVerifySyncBlock);
 
-    friend struct ::cdac_data<Object>;
 };
 
 template<>
-struct cdac_data<Object>
+struct cdac_data<ObjectInternal>
 {
-    static constexpr size_t m_pMethTab = offsetof(Object, m_pMethTab);
+    // TODO NEED TO CHECK
+    static constexpr size_t m_pMethTab = offsetof(ObjectInternal, m_pMethTab);
 };
 
 /*
@@ -524,18 +540,15 @@ void InitValueClassArg(ArgDestination *argDest, MethodTable *pMT);
 // ArrayBase encapuslates all of these details.  In theory you should never
 // have to peek inside this abstraction
 //
-class ArrayBase : public Object
+class ArrayBaseInternal : public ObjectInternal
 {
+    friend class ArrayBase;
+    friend class CoreLibBinder;
+    friend class CheckAsmOffsets;
     friend class GCHeap;
     friend class CObjectHeader;
     friend class Object;
-    friend OBJECTREF AllocateSzArray(MethodTable *pArrayMT, INT32 length, GC_ALLOC_FLAGS flags);
-    friend OBJECTREF TryAllocateFrozenSzArray(MethodTable* pArrayMT, INT32 length);
-    friend OBJECTREF AllocateArrayEx(MethodTable *pArrayMT, INT32 *pArgs, DWORD dwNumArgs, GC_ALLOC_FLAGS flags);
-    friend FCDECL2(Object*, JIT_NewArr1VC_MP_FastPortable, CORINFO_CLASS_HANDLE arrayMT, INT_PTR size);
-    friend FCDECL2(Object*, JIT_NewArr1OBJ_MP_FastPortable, CORINFO_CLASS_HANDLE arrayMT, INT_PTR size);
-    friend class JIT_TrialAlloc;
-    friend class CheckAsmOffsets;
+
     friend struct _DacGlobals;
 
 private:
@@ -553,6 +566,23 @@ private:
     // INT32      bounds[rank];       The bounds are only present for Multidimensional arrays
     // INT32      lowerBounds[rank];  Valid indexes are lowerBounds[i] <= index[i] < lowerBounds[i] + bounds[i]
 
+    friend struct ::cdac_data<ArrayBaseInternal>;
+};
+
+class ArrayBase : public Object
+{
+    friend class GCHeap;
+    friend class CObjectHeader;
+    friend class Object;
+    friend OBJECTREF AllocateSzArray(MethodTable *pArrayMT, INT32 length, GC_ALLOC_FLAGS flags);
+    friend OBJECTREF TryAllocateFrozenSzArray(MethodTable* pArrayMT, INT32 length);
+    friend OBJECTREF AllocateArrayEx(MethodTable *pArrayMT, INT32 *pArgs, DWORD dwNumArgs, GC_ALLOC_FLAGS flags);
+    friend FCDECL2(Object*, JIT_NewArr1VC_MP_FastPortable, CORINFO_CLASS_HANDLE arrayMT, INT_PTR size);
+    friend FCDECL2(Object*, JIT_NewArr1OBJ_MP_FastPortable, CORINFO_CLASS_HANDLE arrayMT, INT_PTR size);
+    friend class JIT_TrialAlloc;
+    friend class CheckAsmOffsets;
+    friend struct _DacGlobals;
+
 public:
     // Get the element type for the array, this works whether the element
     // type is stored in the array or not
@@ -565,6 +595,7 @@ public:
 
     // Total element count for the array
     inline DWORD GetNumComponents() const;
+    inline void  SetNumComponents(DWORD num);
 
     // Get pointer to elements, handles any number of dimensions
     PTR_BYTE GetDataPtr(BOOL inGC = FALSE) const {
@@ -575,7 +606,7 @@ public:
         EnableStressHeapHelper();
 #endif
 #endif
-        return dac_cast<PTR_BYTE>(this) +
+        return dac_cast<PTR_BYTE>(m_pObj) +
                         GetDataPtrOffset(inGC ? GetGCSafeMethodTable() : GetMethodTable());
     }
 
@@ -606,11 +637,11 @@ public:
         if (pMT->IsMultiDimArray())
         {
             return dac_cast<PTR_INT32>(
-                dac_cast<TADDR>(this) + sizeof(*this));
+                dac_cast<TADDR>(m_pObj) + sizeof(*this));
         }
         else
         {
-            return dac_cast<PTR_INT32>(PTR_HOST_MEMBER_TADDR(ArrayBase, this,
+            return dac_cast<PTR_INT32>(PTR_HOST_MEMBER_TADDR(ArrayBaseInternal, (ArrayBaseInternal*)m_pObj,
                                                    m_NumComponents));
         }
     }
@@ -625,12 +656,13 @@ public:
             return GetBoundsPtr() + GetRank();
         }
         else
-            return dac_cast<PTR_INT32>(GVAL_ADDR(s_arrayBoundsZero));
+            return dac_cast<PTR_INT32>(GVAL_ADDR(((ArrayBaseInternal*)m_pObj)->s_arrayBoundsZero));
     }
 
     static unsigned GetOffsetOfNumComponents() {
         LIMITED_METHOD_CONTRACT;
-        return offsetof(ArrayBase, m_NumComponents);
+        _ASSERTE(!"CHECK GetOffsetOfNumComponents");
+        return offsetof(ArrayBaseInternal, m_NumComponents);
     }
 
     inline static unsigned GetDataPtrOffset(MethodTable* pMT);
@@ -638,16 +670,16 @@ public:
     inline static unsigned GetBoundsOffset(MethodTable* pMT);
     inline static unsigned GetLowerBoundsOffset(MethodTable* pMT);
 
-    friend struct ::cdac_data<ArrayBase>;
 };
 
 #ifndef DACCESS_COMPILE
 template<>
-struct cdac_data<ArrayBase>
+struct cdac_data<ArrayBaseInternal>
 {
-    static constexpr size_t m_NumComponents = offsetof(ArrayBase, m_NumComponents);
+    // TODO NEED TO CHECK OFFSET
+    static constexpr size_t m_NumComponents = offsetof(ArrayBaseInternal, m_NumComponents);
 
-    static constexpr INT32* ArrayBoundsZero = &ArrayBase::s_arrayBoundsZero;
+    static constexpr INT32* ArrayBoundsZero = &ArrayBaseInternal::s_arrayBoundsZero;
 };
 #endif
 
@@ -657,6 +689,13 @@ struct cdac_data<ArrayBase>
 //
 
 template < class KIND >
+class ArrayInternal : public ArrayBaseInternal
+{
+  public:
+    KIND          m_Array[1];
+};
+
+template < class KIND >
 class Array : public ArrayBase
 {
   public:
@@ -664,7 +703,7 @@ class Array : public ArrayBase
     typedef DPTR(KIND) PTR_KIND;
     typedef DPTR(const KIND) PTR_CKIND;
 
-    KIND          m_Array[1];
+    // KIND          m_Array[1];
 
     PTR_KIND        GetDirectPointerToNonObjectElements()
     {
@@ -683,6 +722,13 @@ class Array : public ArrayBase
     }
 };
 
+class PtrArrayInternal : public ArrayBaseInternal
+{
+    friend class PtrArray;
+
+public:
+    OBJECTREF    m_Array[1];
+};
 
 // Warning: Use PtrArray only for single dimensional arrays, not multidim arrays.
 class PtrArray : public ArrayBase
@@ -704,13 +750,14 @@ public:
     {
         LIMITED_METHOD_CONTRACT;
         SUPPORTS_DAC;
-        return dac_cast<PTR_OBJECTREF>(dac_cast<PTR_BYTE>(this) + GetDataOffset());
+        return dac_cast<PTR_OBJECTREF>(dac_cast<PTR_BYTE>(m_pObj) + GetDataOffset());
     }
 
     static SIZE_T GetDataOffset()
     {
         LIMITED_METHOD_CONTRACT;
-        return offsetof(PtrArray, m_Array);
+        _ASSERTE(!"GetDataOffset");
+        return offsetof(PtrArrayInternal, m_Array);
     }
 
     void SetAt(SIZE_T i, OBJECTREF ref)
@@ -723,14 +770,14 @@ public:
         }
         CONTRACTL_END;
         _ASSERTE(i < GetNumComponents());
-        SetObjectReference(m_Array + i, ref);
+        SetObjectReference(((PtrArrayInternal*)m_pObj)->m_Array + i, ref);
     }
 
     void ClearAt(SIZE_T i)
     {
         WRAPPER_NO_CONTRACT;
         _ASSERTE(i < GetNumComponents());
-        ClearObjectReference(m_Array + i);
+        ClearObjectReference(((PtrArrayInternal*)m_pObj)->m_Array + i);
     }
 
     OBJECTREF GetAt(SIZE_T i)
@@ -742,9 +789,9 @@ public:
 // DAC doesn't know the true size of this array
 // the compiler thinks it is size 1, but really it is size N hanging off the structure
 #ifndef DACCESS_COMPILE
-        return m_Array[i];
+        return ((PtrArrayInternal*)m_pObj)->m_Array[i];
 #else
-        TADDR arrayTargetAddress = dac_cast<TADDR>(this) + offsetof(PtrArray, m_Array);
+        TADDR arrayTargetAddress = dac_cast<TADDR>(m_pObj) + offsetof(PtrArrayInternal, m_Array);
         __ArrayDPtr<OBJECTREF> targetArray = dac_cast< __ArrayDPtr<OBJECTREF> >(arrayTargetAddress);
         return targetArray[i];
 #endif
@@ -752,11 +799,9 @@ public:
 
     friend class StubLinkerCPU;
     friend class ArrayOpLinker;
-public:
-    OBJECTREF    m_Array[1];
 };
 
-#define OFFSETOF__PtrArray__m_Array_              ARRAYBASE_SIZE
+#define OFFSETOF__PtrArrayInternal__m_Array_              ARRAYBASE_SIZE
 
 /* a TypedByRef is a structure that is used to implement VB's BYREF variants.
    it is basically a tuple of an address of some data along with a TypeHandle
@@ -856,9 +901,9 @@ typedef PTR_StringObject STRINGREF;
  *
  */
 
-
-class StringObject : public Object
+class StringObjectInternal : public ObjectInternal
 {
+    friend class StringObject;
 #ifdef DACCESS_COMPILE
     friend class ClrDataAccess;
 #endif
@@ -871,8 +916,21 @@ class StringObject : public Object
     DWORD   m_StringLength;
     WCHAR   m_FirstChar;
 
+    friend struct ::cdac_data<StringObjectInternal>;
+};
+
+class StringObject : public Object
+{
+#ifdef DACCESS_COMPILE
+    friend class ClrDataAccess;
+#endif
+    friend class GCHeap;
+    friend class JIT_TrialAlloc;
+    friend class CheckAsmOffsets;
+    friend class COMString;
+
   public:
-    VOID    SetStringLength(DWORD len)                   { LIMITED_METHOD_CONTRACT; _ASSERTE(len >= 0); m_StringLength = len; }
+    VOID    SetStringLength(DWORD len)                   { LIMITED_METHOD_CONTRACT; _ASSERTE(len >= 0); ((StringObjectInternal*)m_pObj)->m_StringLength = len; }
 
   protected:
     StringObject() {LIMITED_METHOD_CONTRACT; }
@@ -882,18 +940,20 @@ class StringObject : public Object
     static DWORD GetBaseSize();
     static SIZE_T GetSize(DWORD stringLength);
 
-    DWORD   GetStringLength()                           { LIMITED_METHOD_DAC_CONTRACT; return( m_StringLength );}
-    WCHAR*  GetBuffer()                                 { LIMITED_METHOD_CONTRACT; return (WCHAR*)( dac_cast<TADDR>(this) + offsetof(StringObject, m_FirstChar) );  }
+    DWORD   GetStringLength()                           { LIMITED_METHOD_DAC_CONTRACT; return( ((StringObjectInternal*)m_pObj)->m_StringLength );}
+    WCHAR*  GetBuffer()                                 { LIMITED_METHOD_CONTRACT; return (WCHAR*)( dac_cast<TADDR>(m_pObj) + offsetof(StringObjectInternal, m_FirstChar) );  }
 
     static UINT GetBufferOffset()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return (UINT)(offsetof(StringObject, m_FirstChar));
+        _ASSERTE(!"GetBufferOffset");
+        return (UINT)(offsetof(StringObjectInternal, m_FirstChar));
     }
     static UINT GetStringLengthOffset()
     {
         LIMITED_METHOD_CONTRACT;
-        return (UINT)(offsetof(StringObject, m_StringLength));
+        _ASSERTE(!"CHECK GetStringLengthOffset");
+        return (UINT)(offsetof(StringObjectInternal, m_StringLength));
     }
     VOID    GetSString(SString &result)
     {
@@ -945,19 +1005,17 @@ class StringObject : public Object
 #endif
     }
 
-
-private:
+  private:
     static STRINGREF* EmptyStringRefPtr;
     static bool EmptyStringIsFrozen;
-
-    friend struct ::cdac_data<StringObject>;
 };
 
 template<>
-struct cdac_data<StringObject>
+struct cdac_data<StringObjectInternal>
 {
-    static constexpr size_t m_FirstChar = offsetof(StringObject, m_FirstChar);
-    static constexpr size_t m_StringLength = offsetof(StringObject, m_StringLength);
+    // TODO NEED TO CHECK OFFSET
+    static constexpr size_t m_FirstChar = offsetof(StringObjectInternal, m_FirstChar);
+    static constexpr size_t m_StringLength = offsetof(StringObjectInternal, m_StringLength);
 };
 
 /*================================GetEmptyString================================
@@ -1017,6 +1075,20 @@ class BaseObjectWithCachedData : public Object
 {
 };
 
+class BaseObjectWithCachedDataInternal : public ObjectInternal
+{
+};
+
+class ReflectClassBaseObjectInternal : public BaseObjectWithCachedDataInternal
+{
+    friend class ReflectClassBaseObject;
+    friend class CoreLibBinder;
+
+protected:
+    OBJECTREF           m_keepalive;
+    OBJECTREF           m_cache;
+    TypeHandle          m_typeHandle;
+};
 // This is the Class version of the Reflection object.
 //  A Class has adddition information.
 //  For a ReflectClassBaseObject the m_pData is a pointer to a FieldDesc array that
@@ -1026,11 +1098,6 @@ class BaseObjectWithCachedData : public Object
 class ReflectClassBaseObject : public BaseObjectWithCachedData
 {
     friend class CoreLibBinder;
-
-protected:
-    OBJECTREF           m_keepalive;
-    OBJECTREF           m_cache;
-    TypeHandle          m_typeHandle;
 
 #ifdef _DEBUG
     void TypeCheck()
@@ -1063,7 +1130,7 @@ public:
         CONTRACTL_END;
 
         INDEBUG(TypeCheck());
-        m_typeHandle = type;
+        ((ReflectClassBaseObjectInternal*)m_pObj)->m_typeHandle = type;
     }
 
     void SetKeepAlive(OBJECTREF keepalive)
@@ -1077,7 +1144,7 @@ public:
         CONTRACTL_END;
 
         INDEBUG(TypeCheck());
-        SetObjectReference(&m_keepalive, keepalive);
+        SetObjectReference(&((ReflectClassBaseObjectInternal*)m_pObj)->m_keepalive, keepalive);
     }
 
     TypeHandle GetType() {
@@ -1090,7 +1157,7 @@ public:
         CONTRACTL_END;
 
         INDEBUG(TypeCheck());
-        return m_typeHandle;
+        return ((ReflectClassBaseObjectInternal*)m_pObj)->m_typeHandle;
     }
 
 };
@@ -1103,8 +1170,9 @@ public:
 // (RuntimeConstructorInfo, RuntimeMethodInfo, and RuntimeMethodInfoStub). These types are unrelated in the type
 // system except that they all implement a particular interface. It is important that such interface is not attached to any
 // type that does not sufficiently match this data structure.
-class ReflectMethodObject : public BaseObjectWithCachedData
+class ReflectMethodObjectInternal : public BaseObjectWithCachedDataInternal
 {
+    friend class ReflectMethodObject;
     friend class CoreLibBinder;
 
 protected:
@@ -1118,25 +1186,28 @@ protected:
     OBJECTREF           m_empty7;
     OBJECTREF           m_empty8;
     MethodDesc *        m_pMD;
+};
+class ReflectMethodObject : public BaseObjectWithCachedData
+{
+    friend class CoreLibBinder;
 
 public:
     void SetMethod(MethodDesc *pMethod) {
         LIMITED_METHOD_CONTRACT;
-        m_pMD = pMethod;
+        ((ReflectMethodObjectInternal*)m_pObj)->m_pMD = pMethod;
     }
 
     // This must only be called on instances of ReflectMethodObject that are actually RuntimeMethodInfoStub
     void SetKeepAlive(OBJECTREF keepalive)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference(&m_object, keepalive);
+        SetObjectReference(&((ReflectMethodObjectInternal*)m_pObj)->m_object, keepalive);
     }
 
     MethodDesc *GetMethod() {
         LIMITED_METHOD_CONTRACT;
-        return m_pMD;
+        return ((ReflectMethodObjectInternal*)m_pObj)->m_pMD;
     }
-
 };
 
 // This is the Field version of the Reflection object.
@@ -1147,8 +1218,9 @@ public:
 // (RtFieldInfo and RuntimeFieldInfoStub). These types are unrelated in the type
 // system except that they all implement a particular interface. It is important that such interface is not attached to any
 // type that does not sufficiently match this data structure.
-class ReflectFieldObject : public BaseObjectWithCachedData
+class ReflectFieldObjectInternal : public BaseObjectWithCachedDataInternal
 {
+    friend class ReflectFieldObject;
     friend class CoreLibBinder;
 
 protected:
@@ -1159,23 +1231,28 @@ protected:
     OBJECTREF           m_empty4;
     OBJECTREF           m_empty5;
     FieldDesc *         m_pFD;
+};
+
+class ReflectFieldObject : public BaseObjectWithCachedData
+{
+    friend class CoreLibBinder;
 
 public:
     void SetField(FieldDesc *pField) {
         LIMITED_METHOD_CONTRACT;
-        m_pFD = pField;
+        ((ReflectFieldObjectInternal*)m_pObj)->m_pFD = pField;
     }
 
     // This must only be called on instances of ReflectFieldObject that are actually RuntimeFieldInfoStub
     void SetKeepAlive(OBJECTREF keepalive)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference(&m_object, keepalive);
+        SetObjectReference(&((ReflectFieldObjectInternal*)m_pObj)->m_object, keepalive);
     }
 
     FieldDesc *GetField() {
         LIMITED_METHOD_CONTRACT;
-        return m_pFD;
+        return ((ReflectFieldObjectInternal*)m_pObj)->m_pFD;
     }
 };
 
@@ -1186,8 +1263,9 @@ public:
 //      This class was used to get at this object
 //  m_pData -- this is a generic pointer which usually points CorModule
 //
-class ReflectModuleBaseObject : public Object
+class ReflectModuleBaseObjectInternal : public ObjectInternal
 {
+    friend class ReflectModuleBaseObject;
     friend class CoreLibBinder;
 
   protected:
@@ -1197,6 +1275,11 @@ class ReflectModuleBaseObject : public Object
     OBJECTREF          m_runtimeType;
     OBJECTREF          m_runtimeAssembly;
     Module*            m_pData;         // Pointer to the Module
+};
+
+class ReflectModuleBaseObject : public Object
+{
+    friend class CoreLibBinder;
 
   protected:
     ReflectModuleBaseObject() {LIMITED_METHOD_CONTRACT;}
@@ -1205,34 +1288,41 @@ class ReflectModuleBaseObject : public Object
   public:
     void SetModule(Module* p) {
         LIMITED_METHOD_CONTRACT;
-        m_pData = p;
+        ((ReflectModuleBaseObjectInternal*)m_pObj)->m_pData = p;
     }
     Module* GetModule() {
         LIMITED_METHOD_CONTRACT;
-        return m_pData;
+        return ((ReflectModuleBaseObjectInternal*)m_pObj)->m_pData;
     }
     void SetAssembly(OBJECTREF assembly)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference(&m_runtimeAssembly, assembly);
+        SetObjectReference(&((ReflectModuleBaseObjectInternal*)m_pObj)->m_runtimeAssembly, assembly);
     }
 };
 
 class ThreadBaseObject;
-class SynchronizationContextObject: public Object
+class SynchronizationContextObjectInternal : public ObjectInternal
 {
+    friend class SynchronizationContextObject;
     friend class CoreLibBinder;
+
 private:
     // These field are also defined in the managed representation.  (SecurityContext.cs)If you
     // add or change these field you must also change the managed code so that
     // it matches these.  This is necessary so that the object is the proper
     // size.
     CLR_BOOL _requireWaitNotification;
+};
+
+class SynchronizationContextObject: public Object
+{
+    friend class CoreLibBinder;
 public:
     BOOL IsWaitNotificationRequired() const
     {
         LIMITED_METHOD_CONTRACT;
-        return _requireWaitNotification;
+        return ((SynchronizationContextObjectInternal*)m_pObj)->_requireWaitNotification;
     }
 };
 
@@ -1254,9 +1344,9 @@ typedef CultureInfoBaseObject*     CULTUREINFOBASEREF;
 typedef PTR_ArrayBase ARRAYBASEREF;
 #endif
 
-
-class CultureInfoBaseObject : public Object
+class CultureInfoBaseObjectInternal : public ObjectInternal
 {
+    friend class CultureInfoBaseObject;
     friend class CoreLibBinder;
 
 private:
@@ -1273,32 +1363,35 @@ private:
     CULTUREINFOBASEREF _parent;
     CLR_BOOL _isReadOnly;
     CLR_BOOL _isInherited;
+};
+
+class CultureInfoBaseObject : public Object
+{
+    friend class CoreLibBinder;
 
 public:
     CULTUREINFOBASEREF GetParent()
     {
         LIMITED_METHOD_CONTRACT;
-        return _parent;
+        return ((CultureInfoBaseObjectInternal*)m_pObj)->_parent;
     }// GetParent
 
 
     STRINGREF GetName()
     {
         LIMITED_METHOD_CONTRACT;
-        return _name;
+        return ((CultureInfoBaseObjectInternal*)m_pObj)->_name;
     }// GetName
 
 }; // class CultureInfoBaseObject
 
 typedef DPTR(class ThreadBaseObject) PTR_ThreadBaseObject;
-class ThreadBaseObject : public Object
+class ThreadBaseObjectInternal : public ObjectInternal
 {
-    friend class ClrDataAccess;
+    friend class ThreadBaseObject;
     friend class CoreLibBinder;
-    friend class Object;
 
 private:
-
     // These field are also defined in the managed representation.  If you
     //  add or change these field you must also change the managed code so that
     //  it matches these.  This is necessary so that the object is the proper
@@ -1328,6 +1421,13 @@ private:
     bool          m_IsDead;
 
     bool          m_IsThreadPool;
+};
+
+class ThreadBaseObject : public Object
+{
+    friend class ClrDataAccess;
+    friend class CoreLibBinder;
+    friend class Object;
 
 protected:
     // the ctor and dtor can do no useful work.
@@ -1338,7 +1438,7 @@ public:
     Thread   *GetInternal()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_InternalThread;
+        return ((ThreadBaseObjectInternal*)m_pObj)->m_InternalThread;
     }
 
     void SetInternal(Thread *it);
@@ -1347,18 +1447,18 @@ public:
     void SetManagedThreadId(INT32 id)
     {
         LIMITED_METHOD_CONTRACT;
-        m_ManagedThreadId = id;
+        ((ThreadBaseObjectInternal*)m_pObj)->m_ManagedThreadId = id;
     }
 
     STRINGREF GetName() {
         LIMITED_METHOD_CONTRACT;
-        return m_Name;
+        return ((ThreadBaseObjectInternal*)m_pObj)->m_Name;
     }
 
     OBJECTREF GetSynchronizationContext()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_SynchronizationContext;
+        return ((ThreadBaseObjectInternal*)m_pObj)->m_SynchronizationContext;
     }
 
     void      InitExisting();
@@ -1366,25 +1466,25 @@ public:
     void ResetStartHelper()
     {
         LIMITED_METHOD_CONTRACT
-        m_StartHelper = NULL;
+        ((ThreadBaseObjectInternal*)m_pObj)->m_StartHelper = NULL;
     }
 
     void SetPriority(INT32 priority)
     {
         LIMITED_METHOD_CONTRACT;
-        m_Priority = priority;
+        ((ThreadBaseObjectInternal*)m_pObj)->m_Priority = priority;
     }
 
     INT32 GetPriority() const
     {
         LIMITED_METHOD_CONTRACT;
-        return m_Priority;
+        return ((ThreadBaseObjectInternal*)m_pObj)->m_Priority;
     }
 
     void SetIsDead()
     {
         LIMITED_METHOD_CONTRACT;
-        m_IsDead = true;
+        ((ThreadBaseObjectInternal*)m_pObj)->m_IsDead = true;
     }
 };
 
@@ -1395,12 +1495,13 @@ class MarshalByRefObjectBaseObject : public Object
 {
 };
 
-// AssemblyBaseObject
-// This class is the base class for assemblies
-//
-class AssemblyBaseObject : public Object
+class MarshalByRefObjectBaseObjectInternal : public ObjectInternal
 {
-    friend class Assembly;
+};
+
+class AssemblyBaseObjectInternal : public ObjectInternal
+{
+    friend class AssemblyBaseObject;
     friend class CoreLibBinder;
 
   protected:
@@ -1411,8 +1512,17 @@ class AssemblyBaseObject : public Object
     STRINGREF     m_fullname;              // Slot for storing assemblies fullname
     OBJECTREF     m_pSyncRoot;             // Pointer to loader allocator to keep collectible types alive, and to serve as the syncroot for assembly building in ref.emit
     Assembly* m_pAssembly;                 // Pointer to the Assembly Structure
+};
 
-  protected:
+// AssemblyBaseObject
+// This class is the base class for assemblies
+//
+class AssemblyBaseObject : public Object
+{
+    friend class Assembly;
+    friend class CoreLibBinder;
+
+ protected:
     AssemblyBaseObject() { LIMITED_METHOD_CONTRACT; }
    ~AssemblyBaseObject() { LIMITED_METHOD_CONTRACT; }
 
@@ -1421,7 +1531,7 @@ class AssemblyBaseObject : public Object
     void SetAssembly(Assembly* p)
     {
         LIMITED_METHOD_CONTRACT;
-        m_pAssembly = p;
+        ((AssemblyBaseObjectInternal*)m_pObj)->m_pAssembly = p;
     }
 
     Assembly* GetAssembly();
@@ -1429,7 +1539,7 @@ class AssemblyBaseObject : public Object
     void SetSyncRoot(OBJECTREF pSyncRoot)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference(&m_pSyncRoot, pSyncRoot);
+        SetObjectReference(&((AssemblyBaseObjectInternal*)m_pObj)->m_pSyncRoot, pSyncRoot);
     }
 };
 
@@ -1439,8 +1549,9 @@ class AssemblyBaseObject : public Object
 #if defined(TARGET_X86) && !defined(TARGET_UNIX)
 #include "pshpack4.h"
 #endif // defined(TARGET_X86) && !defined(TARGET_UNIX)
-class AssemblyLoadContextBaseObject : public Object
+class AssemblyLoadContextBaseObjectInternal : public Object
 {
+    friend class AssemblyLoadContextBaseObject;
     friend class CoreLibBinder;
 
   protected:
@@ -1468,13 +1579,17 @@ class AssemblyLoadContextBaseObject : public Object
     DWORD         _state;
     CLR_BOOL      _isCollectible;
 #endif // TARGET_64BIT
+};
+class AssemblyLoadContextBaseObject : public Object
+{
+    friend class CoreLibBinder;
 
   protected:
     AssemblyLoadContextBaseObject() { LIMITED_METHOD_CONTRACT; }
    ~AssemblyLoadContextBaseObject() { LIMITED_METHOD_CONTRACT; }
 
   public:
-    INT_PTR GetNativeAssemblyBinder() { LIMITED_METHOD_CONTRACT; return _nativeAssemblyLoadContext; }
+    INT_PTR GetNativeAssemblyBinder() { LIMITED_METHOD_CONTRACT; return ((AssemblyLoadContextBaseObjectInternal*)m_pObj)->_nativeAssemblyLoadContext; }
 };
 #if defined(TARGET_X86) && !defined(TARGET_UNIX)
 #include "poppack.h"
@@ -1498,10 +1613,25 @@ class AssemblyNameBaseObject : public Object
     // Dummy definition
 };
 
-class WeakReferenceObject : public Object
+class WeakReferenceObjectInternal : public ObjectInternal
 {
+    friend class WeakReferenceObject;
+
 public:
     uintptr_t m_taggedHandle;
+};
+
+class WeakReferenceObject : public Object
+{
+  public:
+    inline uintptr_t GetTaggedHandle() const
+    {
+        return ((WeakReferenceObjectInternal*)m_pObj)->m_taggedHandle;
+    }
+    inline void SetTaggedHandle(uintptr_t hnd)
+    {
+        ((WeakReferenceObjectInternal*)m_pObj)->m_taggedHandle = hnd;
+    }
 };
 
 #ifdef USE_CHECKED_OBJECTREFS
@@ -1589,6 +1719,14 @@ CHARARRAYREF AllocateCharArray(DWORD dwArrayLength);
 //
 //
 //-------------------------------------------------------------
+class ComObjectInternal : public MarshalByRefObjectBaseObjectInternal
+{
+    friend class ComObject;
+
+public:
+    OBJECTREF           m_ObjectToDataMap;
+};
+
 class ComObject : public MarshalByRefObjectBaseObject
 {
     friend class CoreLibBinder;
@@ -1600,7 +1738,6 @@ protected:
     ~ComObject(){LIMITED_METHOD_CONTRACT;};
 
 public:
-    OBJECTREF           m_ObjectToDataMap;
 
     //--------------------------------------------------------------------
     // SupportsInterface
@@ -1639,6 +1776,14 @@ typedef ComObject*     COMOBJECTREF;
 //
 //
 //-------------------------------------------------------------
+class UnknownWrapperInternal : public ObjectInternal
+{
+    friend class UnknownWrapper;
+
+protected:
+    OBJECTREF m_WrappedObject;
+};
+
 class UnknownWrapper : public Object
 {
 protected:
@@ -1647,19 +1792,18 @@ protected:
     UnknownWrapper() {LIMITED_METHOD_CONTRACT;}; // don't instantiate this class directly
     ~UnknownWrapper() {LIMITED_METHOD_CONTRACT;};
 
-    OBJECTREF m_WrappedObject;
 
 public:
     OBJECTREF GetWrappedObject()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_WrappedObject;
+        return ((UnknownWrapperInternal*)m_pObj)->m_WrappedObject;
     }
 
     void SetWrappedObject(OBJECTREF pWrappedObject)
     {
         LIMITED_METHOD_CONTRACT;
-        m_WrappedObject = pWrappedObject;
+        ((UnknownWrapperInternal*)m_pObj)->m_WrappedObject = pWrappedObject;
     }
 };
 
@@ -1675,6 +1819,13 @@ typedef UnknownWrapper*     UNKNOWNWRAPPEROBJECTREF;
 //
 //
 //-------------------------------------------------------------
+class DispatchWrapperInternal : public ObjectInternal
+{
+    friend class DispatchWrapper;
+protected:
+    OBJECTREF m_WrappedObject;
+
+};
 class DispatchWrapper : public Object
 {
 protected:
@@ -1683,19 +1834,17 @@ protected:
     DispatchWrapper() {LIMITED_METHOD_CONTRACT;}; // don't instantiate this class directly
     ~DispatchWrapper() {LIMITED_METHOD_CONTRACT;};
 
-    OBJECTREF m_WrappedObject;
-
 public:
     OBJECTREF GetWrappedObject()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_WrappedObject;
+        return ((DispatchWrapperInternal*)m_pObj)->m_WrappedObject;
     }
 
     void SetWrappedObject(OBJECTREF pWrappedObject)
     {
         LIMITED_METHOD_CONTRACT;
-        m_WrappedObject = pWrappedObject;
+        ((DispatchWrapperInternal*)m_pObj)->m_WrappedObject = pWrappedObject;
     }
 };
 
@@ -1711,6 +1860,14 @@ typedef DispatchWrapper*     DISPATCHWRAPPEROBJECTREF;
 //
 //
 //-------------------------------------------------------------
+class VariantWrapperInternal : public ObjectInternal
+{
+    friend class VariantWrapper;
+protected:
+    OBJECTREF m_WrappedObject;
+
+};
+
 class VariantWrapper : public Object
 {
 protected:
@@ -1719,19 +1876,17 @@ protected:
     VariantWrapper() {LIMITED_METHOD_CONTRACT}; // don't instantiate this class directly
     ~VariantWrapper() {LIMITED_METHOD_CONTRACT};
 
-    OBJECTREF m_WrappedObject;
-
 public:
     OBJECTREF GetWrappedObject()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_WrappedObject;
+        return ((VariantWrapperInternal*)m_pObj)->m_WrappedObject;
     }
 
     void SetWrappedObject(OBJECTREF pWrappedObject)
     {
         LIMITED_METHOD_CONTRACT;
-        m_WrappedObject = pWrappedObject;
+        ((VariantWrapperInternal*)m_pObj)->m_WrappedObject = pWrappedObject;
     }
 };
 
@@ -1747,6 +1902,13 @@ typedef VariantWrapper*     VARIANTWRAPPEROBJECTREF;
 //
 //
 //-------------------------------------------------------------
+class ErrorWrapperInternal : public ObjectInternal
+{
+    friend class ErrorWrapper;
+
+protected:
+    INT32 m_ErrorCode;
+};
 class ErrorWrapper : public Object
 {
 protected:
@@ -1755,19 +1917,17 @@ protected:
     ErrorWrapper() {LIMITED_METHOD_CONTRACT;}; // don't instantiate this class directly
     ~ErrorWrapper() {LIMITED_METHOD_CONTRACT;};
 
-    INT32 m_ErrorCode;
-
 public:
     INT32 GetErrorCode()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_ErrorCode;
+        return ((ErrorWrapperInternal*)m_pObj)->m_ErrorCode;
     }
 
     void SetErrorCode(int ErrorCode)
     {
         LIMITED_METHOD_CONTRACT;
-        m_ErrorCode = ErrorCode;
+        ((ErrorWrapperInternal*)m_pObj)->m_ErrorCode = ErrorCode;
     }
 };
 
@@ -1790,6 +1950,13 @@ typedef ErrorWrapper*     ERRORWRAPPEROBJECTREF;
 #include <pshpack4.h>
 #endif // !ALIGN_ACCESS && !FEATURE_64BIT_ALIGNMENT
 
+class CurrencyWrapperInternal : public ObjectInternal
+{
+    friend CurrencyWrapper;
+
+protected:
+    DECIMAL m_WrappedObject;
+};
 class CurrencyWrapper : public Object
 {
 protected:
@@ -1798,19 +1965,17 @@ protected:
     CurrencyWrapper() {LIMITED_METHOD_CONTRACT;}; // don't instantiate this class directly
     ~CurrencyWrapper() {LIMITED_METHOD_CONTRACT;};
 
-    DECIMAL m_WrappedObject;
-
 public:
     DECIMAL GetWrappedObject()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_WrappedObject;
+        return ((CurrencyWrapperInternal*)m_pObj)->m_WrappedObject;
     }
 
     void SetWrappedObject(DECIMAL WrappedObj)
     {
         LIMITED_METHOD_CONTRACT;
-        m_WrappedObject = WrappedObj;
+        ((CurrencyWrapperInternal*)m_pObj)->m_WrappedObject = WrappedObj;
     }
 };
 
@@ -1829,6 +1994,13 @@ typedef CurrencyWrapper*     CURRENCYWRAPPEROBJECTREF;
 //
 //
 //-------------------------------------------------------------
+class BStrWrapperInternal : public ObjectInternal
+{
+    friend BStrWrapper;
+
+protected:
+    STRINGREF m_WrappedObject;
+};
 class BStrWrapper : public Object
 {
 protected:
@@ -1837,19 +2009,17 @@ protected:
     BStrWrapper() {LIMITED_METHOD_CONTRACT}; // don't instantiate this class directly
     ~BStrWrapper() {LIMITED_METHOD_CONTRACT};
 
-    STRINGREF m_WrappedObject;
-
 public:
     STRINGREF GetWrappedObject()
     {
         LIMITED_METHOD_CONTRACT;
-        return m_WrappedObject;
+        return ((BStrWrapperInternal*)m_pObj)->m_WrappedObject;
     }
 
     void SetWrappedObject(STRINGREF pWrappedObject)
     {
         LIMITED_METHOD_CONTRACT;
-        m_WrappedObject = pWrappedObject;
+        ((BStrWrapperInternal*)m_pObj)->m_WrappedObject = pWrappedObject;
     }
 };
 
@@ -1862,36 +2032,10 @@ typedef BStrWrapper*     BSTRWRAPPEROBJECTREF;
 #endif // FEATURE_COMINTEROP
 
 
-// This class corresponds to System.MulticastDelegate on the managed side.
-class DelegateObject : public Object
+class DelegateObjectInternal : public ObjectInternal
 {
-    friend class CheckAsmOffsets;
+    friend class DelegateObject;
     friend class CoreLibBinder;
-
-public:
-    BOOL IsWrapperDelegate() { LIMITED_METHOD_CONTRACT; return _methodPtrAux == 0; }
-
-    OBJECTREF GetTarget() { LIMITED_METHOD_CONTRACT; return _target; }
-    void SetTarget(OBJECTREF target) { WRAPPER_NO_CONTRACT; SetObjectReference(&_target, target); }
-    static int GetOffsetOfTarget() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObject, _target); }
-
-    PCODE GetMethodPtr() { LIMITED_METHOD_CONTRACT; return _methodPtr; }
-    void SetMethodPtr(PCODE methodPtr) { LIMITED_METHOD_CONTRACT; _methodPtr = methodPtr; }
-    static int GetOffsetOfMethodPtr() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObject, _methodPtr); }
-
-    PCODE GetMethodPtrAux() { LIMITED_METHOD_CONTRACT; return _methodPtrAux; }
-    void SetMethodPtrAux(PCODE methodPtrAux) { LIMITED_METHOD_CONTRACT; _methodPtrAux = methodPtrAux; }
-    static int GetOffsetOfMethodPtrAux() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObject, _methodPtrAux); }
-
-    OBJECTREF GetInvocationList() { LIMITED_METHOD_CONTRACT; return _invocationList; }
-    void SetInvocationList(OBJECTREF invocationList) { WRAPPER_NO_CONTRACT; SetObjectReference(&_invocationList, invocationList); }
-    static int GetOffsetOfInvocationList() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObject, _invocationList); }
-
-    INT_PTR GetInvocationCount() { LIMITED_METHOD_CONTRACT; return _invocationCount; }
-    void SetInvocationCount(INT_PTR invocationCount) { LIMITED_METHOD_CONTRACT; _invocationCount = invocationCount; }
-    static int GetOffsetOfInvocationCount() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObject, _invocationCount); }
-
-    void SetMethodBase(OBJECTREF newMethodBase) { LIMITED_METHOD_CONTRACT; SetObjectReference((OBJECTREF*)&_methodBase, newMethodBase); }
 
     // README:
     // If you modify the order of these fields, make sure to update the definition in
@@ -1905,11 +2049,44 @@ private:
     // System.MulticastDelegate
     OBJECTREF   _invocationList;
     INT_PTR     _invocationCount;
+
+};
+// This class corresponds to System.MulticastDelegate on the managed side.
+class DelegateObject : public Object
+{
+    friend class CheckAsmOffsets;
+    friend class CoreLibBinder;
+
+public:
+    BOOL IsWrapperDelegate() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_methodPtrAux == 0; }
+
+    OBJECTREF GetTarget() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_target; }
+    void SetTarget(OBJECTREF target) { WRAPPER_NO_CONTRACT; SetObjectReference(&((DelegateObjectInternal*)m_pObj)->_target, target); }
+    static int GetOffsetOfTarget() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfTarget"); return offsetof(DelegateObjectInternal, _target); }
+
+    PCODE GetMethodPtr() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_methodPtr; }
+    void SetMethodPtr(PCODE methodPtr) { LIMITED_METHOD_CONTRACT; ((DelegateObjectInternal*)m_pObj)->_methodPtr = methodPtr; }
+    static int GetOffsetOfMethodPtr() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfMethodPtr"); return offsetof(DelegateObjectInternal, _methodPtr); }
+
+    PCODE GetMethodPtrAux() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_methodPtrAux; }
+    void SetMethodPtrAux(PCODE methodPtrAux) { LIMITED_METHOD_CONTRACT; ((DelegateObjectInternal*)m_pObj)->_methodPtrAux = methodPtrAux; }
+    static int GetOffsetOfMethodPtrAux() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfMethodPtrAux"); return offsetof(DelegateObjectInternal, _methodPtrAux); }
+
+    OBJECTREF GetInvocationList() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_invocationList; }
+    void SetInvocationList(OBJECTREF invocationList) { WRAPPER_NO_CONTRACT; SetObjectReference(&((DelegateObjectInternal*)m_pObj)->_invocationList, invocationList); }
+    static int GetOffsetOfInvocationList() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfInvocationList"); return offsetof(DelegateObjectInternal, _invocationList); }
+
+    INT_PTR GetInvocationCount() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_invocationCount; }
+    void SetInvocationCount(INT_PTR invocationCount) { LIMITED_METHOD_CONTRACT; ((DelegateObjectInternal*)m_pObj)->_invocationCount = invocationCount; }
+    static int GetOffsetOfInvocationCount() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfInvocationCount"); return offsetof(DelegateObjectInternal, _invocationCount); }
+
+    void SetMethodBase(OBJECTREF newMethodBase) { LIMITED_METHOD_CONTRACT; SetObjectReference((OBJECTREF*)&((DelegateObjectInternal*)m_pObj)->_methodBase, newMethodBase); }
 };
 
-#define OFFSETOF__DelegateObject__target          OBJECT_SIZE /* m_pMethTab */
-#define OFFSETOF__DelegateObject__methodPtr       (OFFSETOF__DelegateObject__target + TARGET_POINTER_SIZE /* _target */ + TARGET_POINTER_SIZE /* _methodBase */)
-#define OFFSETOF__DelegateObject__methodPtrAux    (OFFSETOF__DelegateObject__methodPtr + TARGET_POINTER_SIZE /* _methodPtr */)
+// TODO NEED TO CHECK
+#define OFFSETOF__DelegateObjectInternal__target          OBJECT_SIZE /* m_pMethTab */
+#define OFFSETOF__DelegateObjectInternal__methodPtr       (OFFSETOF__DelegateObjectInternal__target + TARGET_POINTER_SIZE /* _target */ + TARGET_POINTER_SIZE /* _methodBase */)
+#define OFFSETOF__DelegateObjectInternal__methodPtrAux    (OFFSETOF__DelegateObjectInternal__methodPtr + TARGET_POINTER_SIZE /* _methodPtr */)
 
 #ifdef USE_CHECKED_OBJECTREFS
 typedef REF<DelegateObject> DELEGATEREF;
@@ -2103,13 +2280,20 @@ private:
 
 #ifdef FEATURE_COLLECTIBLE_TYPES
 
+class LoaderAllocatorScoutObjectInternal : public Object
+{
+    friend class LoaderAllocatorScoutObject;
+    friend class LoaderAllocatorObject;
+    friend class CoreLibBinder;
+
+protected:
+    LoaderAllocator * m_nativeLoaderAllocator;
+};
+
 class LoaderAllocatorScoutObject : public Object
 {
     friend class CoreLibBinder;
     friend class LoaderAllocatorObject;
-
-protected:
-    LoaderAllocator * m_nativeLoaderAllocator;
 };
 
 #ifdef USE_CHECKED_OBJECTREFS
@@ -2117,6 +2301,21 @@ typedef REF<LoaderAllocatorScoutObject> LOADERALLOCATORSCOUTREF;
 #else // USE_CHECKED_OBJECTREFS
 typedef LoaderAllocatorScoutObject* LOADERALLOCATORSCOUTREF;
 #endif // USE_CHECKED_OBJECTREFS
+
+class LoaderAllocatorObjectInternal : public Object
+{
+    friend class LoaderAllocatorObject;
+    friend class CoreLibBinder;
+
+    // README:
+    // If you modify the order of these fields, make sure to update the definition in
+    // BCL for this object.
+protected:
+    LOADERALLOCATORSCOUTREF m_pLoaderAllocatorScout;
+    OBJECTREF   m_pSlots;
+    INT32       m_slotsUsed;
+    OBJECTREF   m_methodInstantiationsTable;
+};
 
 class LoaderAllocatorObject : public Object
 {
@@ -2129,7 +2328,7 @@ public:
     PTRARRAYREF DangerousGetHandleTable()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return (PTRARRAYREF)ObjectToOBJECTREF(VolatileLoadWithoutBarrier((Object**)&m_pSlots));
+        return (PTRARRAYREF)ObjectToOBJECTREF(VolatileLoadWithoutBarrier((Object**)&((LoaderAllocatorObjectInternal*)m_pObj)->m_pSlots));
     }
 
 #ifndef DACCESS_COMPILE
@@ -2142,17 +2341,9 @@ public:
     void SetNativeLoaderAllocator(LoaderAllocator * pLoaderAllocator)
     {
         LIMITED_METHOD_CONTRACT;
-        m_pLoaderAllocatorScout->m_nativeLoaderAllocator = pLoaderAllocator;
+        ((LoaderAllocatorScoutObjectInternal*)((LoaderAllocatorObjectInternal*)m_pObj)->m_pLoaderAllocatorScout->m_pObj)->m_nativeLoaderAllocator = pLoaderAllocator;
     }
 
-    // README:
-    // If you modify the order of these fields, make sure to update the definition in
-    // BCL for this object.
-protected:
-    LOADERALLOCATORSCOUTREF m_pLoaderAllocatorScout;
-    OBJECTREF   m_pSlots;
-    INT32       m_slotsUsed;
-    OBJECTREF   m_methodInstantiationsTable;
 };
 
 #ifdef USE_CHECKED_OBJECTREFS
@@ -2225,6 +2416,34 @@ class GenericCacheStruct
 // This class corresponds to Exception on the managed side.
 typedef DPTR(class ExceptionObject) PTR_ExceptionObject;
 #include "pshpack4.h"
+class ExceptionObjectInternal : public ObjectInternal
+{
+    friend class ExceptionObject;
+    friend class CoreLibBinder;
+
+    // README:
+    // If you modify the order of these fields, make sure to update the definition in
+    // BCL for this object.
+private:
+    OBJECTREF   _exceptionMethod;  //Needed for serialization.
+    STRINGREF   _message;
+    OBJECTREF   _data;
+    OBJECTREF   _innerException;
+    STRINGREF   _helpURL;
+    OBJECTREF   _stackTrace;
+    U1ARRAYREF  _watsonBuckets;
+    STRINGREF   _stackTraceString; //Needed for serialization.
+    STRINGREF   _remoteStackTraceString;
+    STRINGREF   _source;         // Mainly used by VB.
+
+    UINT_PTR    _ipForWatsonBuckets; // Contains the IP of exception for watson bucketing
+    void*       _xptrs;
+    INT32       _xcode;
+    INT32       _HResult;
+
+    friend struct ::cdac_data<ExceptionObjectInternal>;
+};
+
 class ExceptionObject : public Object
 {
     friend class CoreLibBinder;
@@ -2233,37 +2452,37 @@ public:
     void SetHResult(HRESULT hr)
     {
         LIMITED_METHOD_CONTRACT;
-        _HResult = hr;
+        ((ExceptionObjectInternal*)m_pObj)->_HResult = hr;
     }
 
     HRESULT GetHResult()
     {
         LIMITED_METHOD_CONTRACT;
-        return _HResult;
+        return ((ExceptionObjectInternal*)m_pObj)->_HResult;
     }
 
     void SetXCode(DWORD code)
     {
         LIMITED_METHOD_CONTRACT;
-        _xcode = code;
+        ((ExceptionObjectInternal*)m_pObj)->_xcode = code;
     }
 
     DWORD GetXCode()
     {
         LIMITED_METHOD_CONTRACT;
-        return _xcode;
+        return ((ExceptionObjectInternal*)m_pObj)->_xcode;
     }
 
     void SetXPtrs(void* xptrs)
     {
         LIMITED_METHOD_CONTRACT;
-        _xptrs = xptrs;
+        ((ExceptionObjectInternal*)m_pObj)->_xptrs = xptrs;
     }
 
     void* GetXPtrs()
     {
         LIMITED_METHOD_CONTRACT;
-        return _xptrs;
+        return ((ExceptionObjectInternal*)m_pObj)->_xptrs;
     }
 
     void SetStackTrace(OBJECTREF stackTrace);
@@ -2275,19 +2494,19 @@ public:
     OBJECTREF GetStackTraceArrayObject() const
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return _stackTrace;
+        return ((ExceptionObjectInternal*)m_pObj)->_stackTrace;
     }
 
     void SetInnerException(OBJECTREF innerException)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_innerException, (OBJECTREF)innerException);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_innerException, (OBJECTREF)innerException);
     }
 
     OBJECTREF GetInnerException()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return VolatileLoadWithoutBarrierOBJECTREF(&_innerException);
+        return VolatileLoadWithoutBarrierOBJECTREF(&((ExceptionObjectInternal*)m_pObj)->_innerException);
     }
 
     // Returns the innermost exception object - equivalent of the
@@ -2314,58 +2533,58 @@ public:
     void SetMessage(STRINGREF message)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_message, (OBJECTREF)message);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_message, (OBJECTREF)message);
     }
 
     STRINGREF GetMessage()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return _message;
+        return ((ExceptionObjectInternal*)m_pObj)->_message;
     }
 
     void SetStackTraceString(STRINGREF stackTraceString)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_stackTraceString, (OBJECTREF)stackTraceString);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_stackTraceString, (OBJECTREF)stackTraceString);
     }
 
     STRINGREF GetStackTraceString()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return _stackTraceString;
+        return ((ExceptionObjectInternal*)m_pObj)->_stackTraceString;
     }
 
     STRINGREF GetRemoteStackTraceString()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return (STRINGREF)VolatileLoadWithoutBarrierOBJECTREF(&_remoteStackTraceString);
+        return (STRINGREF)VolatileLoadWithoutBarrierOBJECTREF(&((ExceptionObjectInternal*)m_pObj)->_remoteStackTraceString);
     }
 
     void SetHelpURL(STRINGREF helpURL)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_helpURL, (OBJECTREF)helpURL);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_helpURL, (OBJECTREF)helpURL);
     }
 
     void SetSource(STRINGREF source)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_source, (OBJECTREF)source);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_source, (OBJECTREF)source);
     }
 
     void ClearStackTraceForThrow()
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_remoteStackTraceString, NULL);
-        SetObjectReference((OBJECTREF*)&_stackTrace, NULL);
-        SetObjectReference((OBJECTREF*)&_stackTraceString, NULL);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_remoteStackTraceString, NULL);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_stackTrace, NULL);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_stackTraceString, NULL);
     }
 
     void ClearStackTracePreservingRemoteStackTrace()
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_stackTrace, NULL);
-        SetObjectReference((OBJECTREF*)&_stackTraceString, NULL);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_stackTrace, NULL);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_stackTraceString, NULL);
     }
 
     // This method will set the reference to the array
@@ -2373,7 +2592,7 @@ public:
     void SetWatsonBucketReference(OBJECTREF oWatsonBucketArray)
     {
         WRAPPER_NO_CONTRACT;
-        SetObjectReference((OBJECTREF*)&_watsonBuckets, (OBJECTREF)oWatsonBucketArray);
+        SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_watsonBuckets, (OBJECTREF)oWatsonBucketArray);
     }
 
     // This method will return the reference to the array
@@ -2381,7 +2600,7 @@ public:
     U1ARRAYREF GetWatsonBucketReference()
     {
         LIMITED_METHOD_CONTRACT;
-        return (U1ARRAYREF)VolatileLoadWithoutBarrierOBJECTREF(&_watsonBuckets);
+        return (U1ARRAYREF)VolatileLoadWithoutBarrierOBJECTREF(&((ExceptionObjectInternal*)m_pObj)->_watsonBuckets);
     }
 
     // This method will return a BOOL to indicate if the
@@ -2397,7 +2616,7 @@ public:
     {
         LIMITED_METHOD_CONTRACT;
 
-        _ipForWatsonBuckets = ip;
+        ((ExceptionObjectInternal*)m_pObj)->_ipForWatsonBuckets = ip;
     }
 
     // This method will return a BOOL to indicate if Watson bucketing IP
@@ -2406,7 +2625,7 @@ public:
     {
         LIMITED_METHOD_CONTRACT;
 
-        return (_ipForWatsonBuckets != 0);
+        return (((ExceptionObjectInternal*)m_pObj)->_ipForWatsonBuckets != 0);
     }
 
     // This method returns the IP for Watson Buckets.
@@ -2414,43 +2633,22 @@ public:
     {
         LIMITED_METHOD_CONTRACT;
 
-        return VolatileLoadWithoutBarrier(&_ipForWatsonBuckets);
+        return VolatileLoadWithoutBarrier(&((ExceptionObjectInternal*)m_pObj)->_ipForWatsonBuckets);
     }
-
-    // README:
-    // If you modify the order of these fields, make sure to update the definition in
-    // BCL for this object.
-private:
-    OBJECTREF   _exceptionMethod;  //Needed for serialization.
-    STRINGREF   _message;
-    OBJECTREF   _data;
-    OBJECTREF   _innerException;
-    STRINGREF   _helpURL;
-    OBJECTREF   _stackTrace;
-    U1ARRAYREF  _watsonBuckets;
-    STRINGREF   _stackTraceString; //Needed for serialization.
-    STRINGREF   _remoteStackTraceString;
-    STRINGREF   _source;         // Mainly used by VB.
-
-    UINT_PTR    _ipForWatsonBuckets; // Contains the IP of exception for watson bucketing
-    void*       _xptrs;
-    INT32       _xcode;
-    INT32       _HResult;
-
-    friend struct ::cdac_data<ExceptionObject>;
 };
 
 template<>
-struct cdac_data<ExceptionObject>
+struct cdac_data<ExceptionObjectInternal>
 {
-    static constexpr size_t _message = offsetof(ExceptionObject, _message);
-    static constexpr size_t _innerException = offsetof(ExceptionObject, _innerException);
-    static constexpr size_t _stackTrace = offsetof(ExceptionObject, _stackTrace);
-    static constexpr size_t _watsonBuckets = offsetof(ExceptionObject, _watsonBuckets);
-    static constexpr size_t _stackTraceString = offsetof(ExceptionObject, _stackTraceString);
-    static constexpr size_t _remoteStackTraceString = offsetof(ExceptionObject, _remoteStackTraceString);
-    static constexpr size_t _HResult = offsetof(ExceptionObject, _HResult);
-    static constexpr size_t _xcode = offsetof(ExceptionObject, _xcode);
+    // TODO NEED TO CHECK
+    static constexpr size_t _message = offsetof(ExceptionObjectInternal, _message);
+    static constexpr size_t _innerException = offsetof(ExceptionObjectInternal, _innerException);
+    static constexpr size_t _stackTrace = offsetof(ExceptionObjectInternal, _stackTrace);
+    static constexpr size_t _watsonBuckets = offsetof(ExceptionObjectInternal, _watsonBuckets);
+    static constexpr size_t _stackTraceString = offsetof(ExceptionObjectInternal, _stackTraceString);
+    static constexpr size_t _remoteStackTraceString = offsetof(ExceptionObjectInternal, _remoteStackTraceString);
+    static constexpr size_t _HResult = offsetof(ExceptionObjectInternal, _HResult);
+    static constexpr size_t _xcode = offsetof(ExceptionObjectInternal, _xcode);
 };
 
 // Defined in Contracts.cs
@@ -2465,6 +2663,17 @@ enum ContractFailureKind
 };
 
 typedef DPTR(class ContractExceptionObject) PTR_ContractExceptionObject;
+class ContractExceptionObjectInternal : public ExceptionObjectInternal
+{
+    friend class ContractExceptionObject;
+    friend class CoreLibBinder;
+
+private:
+    // keep these in sync with ndp/clr/src/bcl/system/diagnostics/contracts/contractsbcl.cs
+    STRINGREF _UserMessage;
+    STRINGREF _Condition;
+    INT32 _Kind;
+};
 class ContractExceptionObject : public ExceptionObject
 {
     friend class CoreLibBinder;
@@ -2474,14 +2683,9 @@ public:
     {
         LIMITED_METHOD_CONTRACT;
 
-        return static_cast<ContractFailureKind>(_Kind);
+        return static_cast<ContractFailureKind>(((ContractExceptionObjectInternal*)m_pObj)->_Kind);
     }
 
-private:
-    // keep these in sync with ndp/clr/src/bcl/system/diagnostics/contracts/contractsbcl.cs
-    STRINGREF _UserMessage;
-    STRINGREF _Condition;
-    INT32 _Kind;
 };
 #include "poppack.h"
 

@@ -657,33 +657,33 @@ void ThreadBaseObject::InitExisting()
     {
     case THREAD_PRIORITY_LOWEST:
     case THREAD_PRIORITY_IDLE:
-        m_Priority = ThreadNative::PRIORITY_LOWEST;
+        SetPriority(ThreadNative::PRIORITY_LOWEST);
         break;
 
     case THREAD_PRIORITY_BELOW_NORMAL:
-        m_Priority = ThreadNative::PRIORITY_BELOW_NORMAL;
+        SetPriority(ThreadNative::PRIORITY_NORMAL);
         break;
 
     case THREAD_PRIORITY_NORMAL:
-        m_Priority = ThreadNative::PRIORITY_NORMAL;
+        SetPriority(ThreadNative::PRIORITY_NORMAL);
         break;
 
     case THREAD_PRIORITY_ABOVE_NORMAL:
-        m_Priority = ThreadNative::PRIORITY_ABOVE_NORMAL;
+        SetPriority(ThreadNative::PRIORITY_ABOVE_NORMAL);
         break;
 
     case THREAD_PRIORITY_HIGHEST:
     case THREAD_PRIORITY_TIME_CRITICAL:
-        m_Priority = ThreadNative::PRIORITY_HIGHEST;
+        SetPriority(ThreadNative::PRIORITY_HIGHEST);
         break;
 
     case THREAD_PRIORITY_ERROR_RETURN:
         _ASSERTE(FALSE);
-        m_Priority = ThreadNative::PRIORITY_NORMAL;
+        SetPriority(ThreadNative::PRIORITY_NORMAL);
         break;
 
     default:
-        m_Priority = ThreadNative::PRIORITY_NORMAL;
+        SetPriority(ThreadNative::PRIORITY_NORMAL);
         break;
     }
 }

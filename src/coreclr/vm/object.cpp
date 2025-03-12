@@ -19,7 +19,7 @@
 #include "argdestination.h"
 
 
-SVAL_IMPL(INT32, ArrayBase, s_arrayBoundsZero);
+SVAL_IMPL(INT32, ArrayBaseInternal, s_arrayBoundsZero);
 
 static DWORD GetGlobalNewHashCode()
 {
@@ -284,7 +284,7 @@ TypeHandle Object::GetGCSafeTypeHandleIfPossible() const
 Assembly *AssemblyBaseObject::GetAssembly()
 {
     WRAPPER_NO_CONTRACT;
-    return m_pAssembly;
+    return ((AssemblyBaseObjectInternal*)m_pObj)->m_pAssembly;
 }
 
 STRINGREF AllocateString(SString sstr)
@@ -1804,8 +1804,8 @@ void ThreadBaseObject::SetInternal(Thread *it)
     WRAPPER_NO_CONTRACT;
 
     // only allow a transition from NULL to non-NULL
-    _ASSERTE((m_InternalThread == NULL) && (it != NULL));
-    m_InternalThread = it;
+    _ASSERTE((((ThreadBaseObjectInternal*)m_pObj)->m_InternalThread == NULL) && (it != NULL));
+    ((ThreadBaseObjectInternal*)m_pObj)->m_InternalThread = it;
 
     // Now the native Thread will only be destroyed after the managed Thread is collected.
     // Tell the GC that the managed Thread actually represents much more memory.
@@ -1816,8 +1816,8 @@ void ThreadBaseObject::ClearInternal()
 {
     WRAPPER_NO_CONTRACT;
 
-    _ASSERTE(m_InternalThread != NULL);
-    m_InternalThread = NULL;
+    _ASSERTE(((ThreadBaseObjectInternal*)m_pObj)->m_InternalThread != NULL);
+    ((ThreadBaseObjectInternal*)m_pObj)->m_InternalThread = NULL;
     GCInterface::RemoveMemoryPressure(sizeof(Thread));
 }
 
@@ -1858,7 +1858,7 @@ void ExceptionObject::SetStackTrace(OBJECTREF stackTrace)
     }
 #endif
 
-    SetObjectReference((OBJECTREF*)&_stackTrace, (OBJECTREF)stackTrace);
+    SetObjectReference((OBJECTREF*)&((ExceptionObjectInternal*)m_pObj)->_stackTrace, (OBJECTREF)stackTrace);
 }
 #endif // !defined(DACCESS_COMPILE)
 
@@ -1881,7 +1881,7 @@ void ExceptionObject::GetStackTrace(StackTraceArray & stackTrace, PTRARRAYREF * 
     }
     CONTRACTL_END;
 
-    ExceptionObject::GetStackTraceParts(_stackTrace, stackTrace, outKeepAliveArray);
+    ExceptionObject::GetStackTraceParts(((ExceptionObjectInternal*)m_pObj)->_stackTrace, stackTrace, outKeepAliveArray);
 
 #ifndef DACCESS_COMPILE
     Thread *pThread = GetThread();
@@ -2017,7 +2017,7 @@ void LoaderAllocatorObject::SetSlotsUsed(INT32 newSlotsUsed)
     }
     CONTRACTL_END;
 
-    m_slotsUsed = newSlotsUsed;
+    ((LoaderAllocatorObjectInternal*)m_pObj)->m_slotsUsed = newSlotsUsed;
 }
 
 PTRARRAYREF LoaderAllocatorObject::GetHandleTable()
@@ -2031,7 +2031,7 @@ PTRARRAYREF LoaderAllocatorObject::GetHandleTable()
     }
     CONTRACTL_END;
 
-    return (PTRARRAYREF)m_pSlots;
+    return (PTRARRAYREF)((LoaderAllocatorObjectInternal*)m_pObj)->m_pSlots;
 }
 
 void LoaderAllocatorObject::SetHandleTable(PTRARRAYREF handleTable)
@@ -2045,7 +2045,7 @@ void LoaderAllocatorObject::SetHandleTable(PTRARRAYREF handleTable)
     }
     CONTRACTL_END;
 
-    SetObjectReference(&m_pSlots, (OBJECTREF)handleTable);
+    SetObjectReference(&((LoaderAllocatorObjectInternal*)m_pObj)->m_pSlots, (OBJECTREF)handleTable);
 }
 
 INT32 LoaderAllocatorObject::GetSlotsUsed()
@@ -2059,7 +2059,7 @@ INT32 LoaderAllocatorObject::GetSlotsUsed()
     }
     CONTRACTL_END;
 
-    return m_slotsUsed;
+    return ((LoaderAllocatorObjectInternal*)m_pObj)->m_slotsUsed;
 }
 
 #ifdef DEBUG
