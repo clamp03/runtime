@@ -756,7 +756,6 @@ public:
     static SIZE_T GetDataOffset()
     {
         LIMITED_METHOD_CONTRACT;
-        _ASSERTE(!"GetDataOffset");
         return offsetof(PtrArrayInternal, m_Array);
     }
 

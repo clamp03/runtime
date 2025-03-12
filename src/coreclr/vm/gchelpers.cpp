@@ -526,13 +526,6 @@ OBJECTREF AllocateSzArray(MethodTable* pArrayMT, INT32 cElements, GC_ALLOC_FLAGS
     ArrayBase* orArray = NULL;
     if (flags & GC_ALLOC_USER_OLD_HEAP)
     {
-#ifdef FEATURE_NEW_GC
-        if (CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_gcNew))
-        {
-            orArray = (ArrayBase*)*(uintptr_t*)((uint8_t*)Alloc(totalSize, flags));
-        }
-        else
-#endif // FEATURE_NEW_GC
         orArray = (ArrayBase*)Alloc(totalSize, flags);
 
         orArray->SetMethodTableForUOHObject(pArrayMT);
@@ -558,13 +551,6 @@ OBJECTREF AllocateSzArray(MethodTable* pArrayMT, INT32 cElements, GC_ALLOC_FLAGS
             flags |= GC_ALLOC_ALIGN8;
         }
 #endif
-#ifdef FEATURE_NEW_GC
-        if (CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_gcNew))
-        {
-            orArray = (ArrayBase*)*(uintptr_t*)((uint8_t*)Alloc(totalSize, flags));
-        }
-        else
-#endif // FEATURE_NEW_GC
         orArray = (ArrayBase*)Alloc(totalSize, flags);
 
         orArray->SetMethodTable(pArrayMT);
@@ -805,13 +791,6 @@ OBJECTREF AllocateArrayEx(MethodTable *pArrayMT, INT32 *pArgs, DWORD dwNumArgs, 
     ArrayBase* orArray = NULL;
     if (flags & GC_ALLOC_USER_OLD_HEAP)
     {
-#ifdef FEATURE_NEW_GC
-        if (CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_gcNew))
-        {
-            orArray = (ArrayBase*)*(uintptr_t*)((uint8_t*)Alloc(totalSize, flags));
-        }
-        else
-#endif // FEATURE_NEW_GC
         orArray = (ArrayBase*)Alloc(totalSize, flags);
 
         orArray->SetMethodTableForUOHObject(pArrayMT);
@@ -831,13 +810,6 @@ OBJECTREF AllocateArrayEx(MethodTable *pArrayMT, INT32 *pArgs, DWORD dwNumArgs, 
             flags |= GC_ALLOC_ALIGN8;
         }
 #endif
-#ifdef FEATURE_NEW_GC
-        if (CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_gcNew))
-        {
-            orArray = (ArrayBase*)*(uintptr_t*)((uint8_t*)Alloc(totalSize, flags));
-        }
-        else
-#endif // FEATURE_NEW_GC
         orArray = (ArrayBase*)Alloc(totalSize, flags);
 
         orArray->SetMethodTable(pArrayMT);
@@ -1023,14 +995,6 @@ STRINGREF AllocateString( DWORD cchStringLength )
         flags |= GC_ALLOC_LARGE_OBJECT_HEAP;
 
     StringObject* orString;
-#ifdef FEATURE_NEW_GC
-    //assert(!"[CLAMP] NYI:");
-    if (CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_gcNew))
-    {
-        orString = (StringObject*)*(uintptr_t*)((uint8_t*)Alloc(totalSize, flags));
-    }
-    else
-#endif // FEATURE_NEW_GC
     orString = (StringObject*)Alloc(totalSize, flags);
 
     // Initialize Object
@@ -1197,13 +1161,6 @@ OBJECTREF AllocateObject(MethodTable *pMT
 #endif // FEATURE_64BIT_ALIGNMENT
 
         Object* orObject;
-#ifdef FEATURE_NEW_GC
-        if (CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_gcNew))
-        {
-            orObject = (Object*)*(uintptr_t*)((uint8_t*)Alloc(totalSize, flags));
-        }
-        else
-#endif // FEATURE_NEW_GC
         orObject = (Object*)Alloc(totalSize, flags);
 
         if (flags & GC_ALLOC_USER_OLD_HEAP)
