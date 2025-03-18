@@ -4408,6 +4408,11 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
     //             addressing mode instruction.  Currently we're 'cheating' by producing one or more
     //             instructions to generate the addressing mode so we need to modify lowering to
     //             produce LEAs that are a 1:1 relationship to the ARM64 architecture.
+    if (lea->HasBase() && lea->Base()->TypeGet() == TYP_REF) // FEATURE_NEW_GC
+    {
+        emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, lea->Base()->GetRegNum(), lea->Base()->GetRegNum()); // FEATURE_NEW_GC
+    }
+
     if (lea->HasBase() && lea->HasIndex())
     {
         GenTree* memBase = lea->Base();
