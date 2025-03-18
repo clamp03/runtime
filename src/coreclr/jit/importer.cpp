@@ -7154,16 +7154,13 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                 }
 
 #ifdef FEATURE_NEW_GC
-                if (JitConfig.JitNewGC())
+                if (opcode == CEE_LDELEM_I || opcode == CEE_LDELEM_I4)
                 {
-                    if (opcode == CEE_LDELEM_I || opcode == CEE_LDELEM_I4)
-                    {
-                        fprintf(stderr, "[CLAMP] HELP_ARR_LD\n");
-                        //op1 = impAppendTree(gtNewHelperCallNode(CORINFO_HELP_ARR_LD, lclTyp, op1, op2), CHECK_SPILL_NONE, impCurStmtDI );
-                        op1 = gtNewHelperCallNode(CORINFO_HELP_ARR_LD, lclTyp, op1, op2);
-                        impPushOnStack(op1, tiRetVal);
-                        break;
-                    }
+                    fprintf(stderr, "[CLAMP] HELP_ARR_LD\n");
+                    //op1 = impAppendTree(gtNewHelperCallNode(CORINFO_HELP_ARR_LD, lclTyp, op1, op2), CHECK_SPILL_NONE, impCurStmtDI );
+                    op1 = gtNewHelperCallNode(CORINFO_HELP_ARR_LD, lclTyp, op1, op2);
+                    impPushOnStack(op1, tiRetVal);
+                    break;
                 }
 #endif // FEATURE_NEW_GC
 
@@ -7274,14 +7271,11 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                 }
 
 #ifdef FEATURE_NEW_GC
-                if (JitConfig.JitNewGC())
+                if (opcode == CEE_STELEM_I || opcode == CEE_STELEM_I4)
                 {
-                    if (opcode == CEE_STELEM_I || opcode == CEE_STELEM_I4)
-                    {
-                        fprintf(stderr, "[CLAMP] HELP_ARR_ST\n");
-                        op1 = gtNewHelperCallNode(CORINFO_HELP_ARR_ST, TYP_VOID, op3, op1, op2);
-                        goto SPILL_APPEND;
-                    }
+                    fprintf(stderr, "[CLAMP] HELP_ARR_ST\n");
+                    op1 = gtNewHelperCallNode(CORINFO_HELP_ARR_ST, TYP_VOID, op3, op1, op2);
+                    goto SPILL_APPEND;
                 }
 #endif // FEATURE_NEW_GC
 

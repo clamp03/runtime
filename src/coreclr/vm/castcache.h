@@ -280,7 +280,7 @@ private:
         LIMITED_METHOD_CONTRACT;
 
         // element 0 is used for embedded aux data
-        return (DWORD*)((BYTE*)OBJECTREFToObject(table) + ARRAYBASE_SIZE);
+        return (DWORD*)((BYTE*)OBJECTREFToObject(table)->m_pObj + ARRAYBASE_SIZE);
     }
 
     FORCEINLINE static CastCacheEntry* Elements(DWORD* tableData)

@@ -857,8 +857,8 @@ STRINGREF StringObject::NewString(LPCUTF8 psz, int cBytes)
 // STATIC MEMBER VARIABLES
 //
 //
-STRINGREF* StringObject::EmptyStringRefPtr = NULL;
-bool StringObject::EmptyStringIsFrozen = false;
+STRINGREF* StringObjectInternal::EmptyStringRefPtr = NULL;
+bool StringObjectInternal::EmptyStringIsFrozen = false;
 
 //The special string helpers are used as flag bits for weird strings that have bytes
 //after the terminating 0.  The only case where we use this right now is the VB BSTR as
@@ -896,9 +896,9 @@ STRINGREF* StringObject::InitEmptyStringRefPtr() {
 
     EEStringData data(0, W(""), TRUE);
     void* pinnedStr = nullptr;
-    EmptyStringRefPtr = SystemDomain::System()->DefaultDomain()->GetLoaderAllocator()->GetStringObjRefPtrFromUnicodeString(&data, &pinnedStr);
-    EmptyStringIsFrozen = pinnedStr != nullptr;
-    return EmptyStringRefPtr;
+    StringObjectInternal::EmptyStringRefPtr = SystemDomain::System()->DefaultDomain()->GetLoaderAllocator()->GetStringObjRefPtrFromUnicodeString(&data, &pinnedStr);
+    StringObjectInternal::EmptyStringIsFrozen = pinnedStr != nullptr;
+    return StringObjectInternal::EmptyStringRefPtr;
 }
 
 // strAChars must be null-terminated, with an appropriate aLength

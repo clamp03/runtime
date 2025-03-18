@@ -6544,7 +6544,12 @@ GenTree* Lowering::LowerVirtualVtableCall(GenTreeCall* call)
     }
 
     // pointer to virtual table = [REG_CALL_THIS + offs]
-    GenTree* result = Ind(Offset(local, VPTR_OFFS));
+//#ifdef FEATURE_NEW_GC
+//    GenTree* result = Ind(Offset(local, 0));
+//    result = Ind(Offset(result, VPTR_OFFS)); // LEA(b+0)
+//#else
+    GenTree* result = Ind(Offset(local, VPTR_OFFS)); // LEA(b+0)
+//#endif
 
     // Get the appropriate vtable chunk
     if (vtabOffsOfIndirection != CORINFO_VIRTUALCALL_NO_CHUNK)

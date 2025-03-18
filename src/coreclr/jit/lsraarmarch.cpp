@@ -79,6 +79,10 @@ int LinearScan::BuildIndir(GenTreeIndir* indirTree)
             index                = lea->Index();
             cns                  = lea->Offset();
 
+            if (!addr->IsIconHandle() && addr->AsAddrMode()->Base()->TypeGet() == TYP_REF)
+            {
+                buildInternalIntRegisterDefForNode(indirTree); // FEATURE_NEW_GC
+            }
             // On ARM we may need a single internal register
             // (when both conditions are true then we still only need a single internal register)
             if ((index != nullptr) && (cns != 0))

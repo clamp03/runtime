@@ -125,7 +125,7 @@ DEFINE_CLASS(NATIVE_ASSEMBLY_NAME_PARTS,   Reflection,             NativeAssembl
 // Maybe we should reverse these two names
 DEFINE_CLASS(ASSEMBLYBASE,          Reflection,             Assembly)
 
-DEFINE_CLASS_U(Reflection,             RuntimeAssembly,            AssemblyBaseObject)
+DEFINE_CLASS_U(Reflection,             RuntimeAssembly,            AssemblyBaseObjectInternal)
 DEFINE_FIELD_U(_ModuleResolve,             AssemblyBaseObjectInternal,     m_pModuleEventHandler)
 DEFINE_FIELD_U(m_fullname,                 AssemblyBaseObjectInternal,     m_fullname)
 DEFINE_FIELD_U(m_syncRoot,                 AssemblyBaseObjectInternal,     m_pSyncRoot)
@@ -144,7 +144,7 @@ DEFINE_CLASS(BINDER,                Reflection,             Binder)
 
 DEFINE_CLASS(BINDING_FLAGS,         Reflection,             BindingFlags)
 
-DEFINE_CLASS_U(System,                 RuntimeType,            ReflectClassBaseObject)
+DEFINE_CLASS_U(System,                 RuntimeType,            ReflectClassBaseObjectInternal)
 DEFINE_FIELD_U(m_cache,                ReflectClassBaseObjectInternal,        m_cache)
 DEFINE_FIELD_U(m_handle,               ReflectClassBaseObjectInternal,        m_typeHandle)
 DEFINE_FIELD_U(m_keepalive,            ReflectClassBaseObjectInternal,        m_keepalive)
@@ -177,7 +177,7 @@ END_ILLINK_FEATURE_SWITCH()
 
 BEGIN_ILLINK_FEATURE_SWITCH(System.Runtime.InteropServices.BuiltInComInterop.IsSupported, true, true)
 #ifdef FEATURE_COMINTEROP
-DEFINE_CLASS_U(System,                 __ComObject,            ComObject)
+DEFINE_CLASS_U(System,                 __ComObject,            ComObjectInternal)
 DEFINE_FIELD_U(m_ObjectToDataMap,      ComObjectInternal,              m_ObjectToDataMap)
 DEFINE_CLASS(COM_OBJECT,            System,                 __ComObject)
 DEFINE_METHOD(COM_OBJECT,           RELEASE_ALL_DATA,       ReleaseAllData,             IM_RetVoid)
@@ -212,7 +212,7 @@ DEFINE_CLASS_U(Reflection,             RuntimeConstructorInfo,  NoClass)
 DEFINE_FIELD_U(m_handle,                   ReflectMethodObjectInternal, m_pMD)
 DEFINE_CLASS(CONSTRUCTOR,           Reflection,             RuntimeConstructorInfo)
 
-DEFINE_CLASS_U(System,                 RuntimeMethodInfoStub,     ReflectMethodObject)
+DEFINE_CLASS_U(System,                 RuntimeMethodInfoStub,     ReflectMethodObjectInternal)
 DEFINE_FIELD_U(m_value,                   ReflectMethodObjectInternal, m_pMD)
 DEFINE_CLASS(STUBMETHODINFO,      System,                 RuntimeMethodInfoStub)
 DEFINE_FIELD(STUBMETHODINFO,      HANDLE,                 m_value)
@@ -220,7 +220,7 @@ DEFINE_METHOD(STUBMETHODINFO,     FROMPTR,                FromPtr,              
 
 DEFINE_CLASS(CONSTRUCTOR_INFO,      Reflection,             ConstructorInfo)
 
-DEFINE_CLASS_U(Globalization,          CultureInfo,        CultureInfoBaseObject)
+DEFINE_CLASS_U(Globalization,          CultureInfo,        CultureInfoBaseObjectInternal)
 DEFINE_FIELD_U(_compareInfo,       CultureInfoBaseObjectInternal,  _compareInfo)
 DEFINE_FIELD_U(_textInfo,          CultureInfoBaseObjectInternal,  _textInfo)
 DEFINE_FIELD_U(_numInfo,           CultureInfoBaseObjectInternal,  _numInfo)
@@ -304,7 +304,7 @@ DEFINE_CLASS(EVENT_HANDLERGENERIC,  System,                 EventHandler`1)
 
 DEFINE_CLASS(EVENT_INFO,            Reflection,             EventInfo)
 
-DEFINE_CLASS_U(System,                 Exception,      ExceptionObject)
+DEFINE_CLASS_U(System,                 Exception,      ExceptionObjectInternal)
 DEFINE_FIELD_U(_exceptionMethod,   ExceptionObjectInternal,    _exceptionMethod)
 DEFINE_FIELD_U(_message,           ExceptionObjectInternal,    _message)
 DEFINE_FIELD_U(_data,              ExceptionObjectInternal,    _data)
@@ -360,7 +360,7 @@ DEFINE_FIELD_U(m_fieldHandle,       ReflectFieldObjectInternal,     m_pFD)
 DEFINE_CLASS(RT_FIELD_INFO,         Reflection,             RtFieldInfo)
 DEFINE_FIELD(RT_FIELD_INFO,         HANDLE,                 m_fieldHandle)
 
-DEFINE_CLASS_U(System,              RuntimeFieldInfoStub,   ReflectFieldObject)
+DEFINE_CLASS_U(System,              RuntimeFieldInfoStub,   ReflectFieldObjectInternal)
 DEFINE_FIELD_U(m_fieldHandle,       ReflectFieldObjectInternal,     m_pFD)
 DEFINE_CLASS(STUBFIELDINFO,         System,                 RuntimeFieldInfoStub)
 DEFINE_METHOD(STUBFIELDINFO,        FROMPTR,                FromPtr,                     SM_IntPtr_RetObj)
@@ -543,7 +543,7 @@ DEFINE_METHOD(METHOD_HANDLE,        TO_INTPTR,              ToIntPtr,           
 DEFINE_CLASS(MISSING,               Reflection,             Missing)
 DEFINE_FIELD(MISSING,               VALUE,                  Value)
 
-DEFINE_CLASS_U(Reflection,             RuntimeModule,               ReflectModuleBaseObject)
+DEFINE_CLASS_U(Reflection,             RuntimeModule,               ReflectModuleBaseObjectInternal)
 DEFINE_FIELD_U(m_runtimeType,               ReflectModuleBaseObjectInternal,    m_runtimeType)
 DEFINE_FIELD_U(m_runtimeAssembly,           ReflectModuleBaseObjectInternal,    m_runtimeAssembly)
 DEFINE_FIELD_U(m_pData,                     ReflectModuleBaseObjectInternal,    m_pData)
@@ -552,7 +552,7 @@ DEFINE_CLASS(MODULE,                Reflection,             RuntimeModule)
 DEFINE_CLASS(TYPE_BUILDER,          ReflectionEmit,         TypeBuilder)
 DEFINE_CLASS(ENUM_BUILDER,          ReflectionEmit,         EnumBuilder)
 
-DEFINE_CLASS_U(System,                 MulticastDelegate,          DelegateObject)
+DEFINE_CLASS_U(System,                 MulticastDelegate,          DelegateObjectInternal)
 DEFINE_FIELD_U(_invocationList,            DelegateObjectInternal,   _invocationList)
 DEFINE_FIELD_U(_invocationCount,           DelegateObjectInternal,   _invocationCount)
 DEFINE_CLASS(MULTICAST_DELEGATE,    System,                 MulticastDelegate)
@@ -846,7 +846,7 @@ DEFINE_METHOD(STRING_BUILDER,       INTERNAL_COPY,          InternalCopy,       
 DEFINE_METHOD(STRING_BUILDER,       REPLACE_BUFFER_INTERNAL,ReplaceBufferInternal,      IM_PtrChar_Int_RetVoid)
 DEFINE_METHOD(STRING_BUILDER,       REPLACE_BUFFER_ANSI_INTERNAL,ReplaceBufferAnsiInternal, IM_PtrSByt_Int_RetVoid)
 
-DEFINE_CLASS_U(Threading,              SynchronizationContext, SynchronizationContextObject)
+DEFINE_CLASS_U(Threading,              SynchronizationContext, SynchronizationContextObjectInternal)
 DEFINE_FIELD_U(_requireWaitNotification, SynchronizationContextObjectInternal, _requireWaitNotification)
 DEFINE_CLASS(SYNCHRONIZATION_CONTEXT,    Threading,              SynchronizationContext)
 DEFINE_METHOD(SYNCHRONIZATION_CONTEXT,  INVOKE_WAIT_METHOD_HELPER, InvokeWaitMethodHelper, SM_SyncCtx_ArrIntPtr_Bool_Int_RetInt)
@@ -855,7 +855,7 @@ DEFINE_METHOD(SYNCHRONIZATION_CONTEXT,  INVOKE_WAIT_METHOD_HELPER, InvokeWaitMet
 DEFINE_CLASS(STACKCRAWMARK,         Threading,       StackCrawlMark)
 #endif
 
-DEFINE_CLASS_U(Threading,              Thread,                     ThreadBaseObject)
+DEFINE_CLASS_U(Threading,              Thread,                     ThreadBaseObjectInternal)
 DEFINE_FIELD_U(_name,                     ThreadBaseObjectInternal,   m_Name)
 DEFINE_FIELD_U(_startHelper,              ThreadBaseObjectInternal,   m_StartHelper)
 DEFINE_FIELD_U(_DONT_USE_InternalThread,  ThreadBaseObjectInternal,   m_InternalThread)
@@ -894,7 +894,7 @@ DEFINE_CLASS(EXCEPTION_DISPATCH_INFO, ExceptionServices,      ExceptionDispatchI
 DEFINE_METHOD(EXCEPTION_DISPATCH_INFO, CAPTURE, Capture, NoSig)
 DEFINE_METHOD(EXCEPTION_DISPATCH_INFO, THROW, Throw, IM_RetVoid)
 
-DEFINE_CLASS_U(Loader,             AssemblyLoadContext,           AssemblyLoadContextBaseObject)
+DEFINE_CLASS_U(Loader,             AssemblyLoadContext,           AssemblyLoadContextBaseObjectInternal)
 DEFINE_FIELD_U(_unloadLock,                 AssemblyLoadContextBaseObjectInternal, _unloadLock)
 DEFINE_FIELD_U(_resolvingUnmanagedDll,      AssemblyLoadContextBaseObjectInternal, _resolvingUnmanagedDll)
 DEFINE_FIELD_U(_resolving,                  AssemblyLoadContextBaseObjectInternal, _resolving)
@@ -927,7 +927,7 @@ DEFINE_CLASS(GC,                    System,                 GC)
 DEFINE_METHOD(GC,                   KEEP_ALIVE,             KeepAlive,                  SM_Obj_RetVoid)
 DEFINE_METHOD(GC,                   RUN_FINALIZERS,         RunFinalizers,              SM_RetUInt)
 
-DEFINE_CLASS_U(System,              WeakReference,          WeakReferenceObject)
+DEFINE_CLASS_U(System,              WeakReference,          WeakReferenceObjectInternal)
 DEFINE_FIELD_U(_taggedHandle,       WeakReferenceObjectInternal,    m_taggedHandle)
 DEFINE_CLASS(WEAKREFERENCE,         System,                 WeakReference)
 DEFINE_CLASS(WEAKREFERENCEGENERIC,  System,                 WeakReference`1)
@@ -1119,19 +1119,19 @@ DEFINE_METHOD(ICOMPARABLEGENERIC,   COMPARE_TO,             CompareTo,          
 
 DEFINE_CLASS(IEQUATABLEGENERIC,     System,                 IEquatable`1)
 
-DEFINE_CLASS_U(Reflection,             LoaderAllocator,          LoaderAllocatorObject)
+DEFINE_CLASS_U(Reflection,             LoaderAllocator,          LoaderAllocatorObjectInternal)
 DEFINE_FIELD_U(m_slots,                  LoaderAllocatorObjectInternal,      m_pSlots)
 DEFINE_FIELD_U(m_slotsUsed,              LoaderAllocatorObjectInternal,      m_slotsUsed)
 DEFINE_CLASS(LOADERALLOCATOR,           Reflection,             LoaderAllocator)
 DEFINE_METHOD(LOADERALLOCATOR,          CTOR,                   .ctor,                    IM_RetVoid)
 
-DEFINE_CLASS_U(Reflection,             LoaderAllocatorScout,     LoaderAllocatorScoutObject)
+DEFINE_CLASS_U(Reflection,             LoaderAllocatorScout,     LoaderAllocatorScoutObjectInternal)
 DEFINE_FIELD_U(m_nativeLoaderAllocator,  LoaderAllocatorScoutObjectInternal,      m_nativeLoaderAllocator)
 DEFINE_CLASS(LOADERALLOCATORSCOUT,      Reflection,             LoaderAllocatorScout)
 
 DEFINE_CLASS(CONTRACTEXCEPTION,     CodeContracts,  ContractException)
 
-DEFINE_CLASS_U(CodeContracts,       ContractException,          ContractExceptionObject)
+DEFINE_CLASS_U(CodeContracts,       ContractException,          ContractExceptionObjectInternal)
 DEFINE_FIELD_U(_kind,               ContractExceptionObjectInternal,    _Kind)
 DEFINE_FIELD_U(_userMessage,        ContractExceptionObjectInternal,    _UserMessage)
 DEFINE_FIELD_U(_condition,          ContractExceptionObjectInternal,    _Condition)

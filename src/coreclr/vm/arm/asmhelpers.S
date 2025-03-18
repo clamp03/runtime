@@ -334,7 +334,7 @@ LEAF_END JIT_ProfilerEnterLeaveTailcallStub, _TEXT
 NESTED_ENTRY \helper\()Naked, _TEXT, NoHandler
     PROLOG_PUSH "{r0,r3,r9,r12}"
 
-    // for the 5 arguments that do not need popped plus 4 bytes of alignment 
+    // for the 5 arguments that do not need popped plus 4 bytes of alignment
     alloc_stack 6*4
 
     // push fp regs
@@ -362,7 +362,7 @@ NESTED_ENTRY \helper\()Naked, _TEXT, NoHandler
     // clear hiddenArg
     movw        r2, #0
     str         r2, [sp, PROFILE_PLATFORM_SPECIFIC_DATA__hiddenArg]
-    
+
     // set the flag to indicate what hook this is
     movw        r2, \flags
     str         r2, [sp, PROFILE_PLATFORM_SPECIFIC_DATA__flags]

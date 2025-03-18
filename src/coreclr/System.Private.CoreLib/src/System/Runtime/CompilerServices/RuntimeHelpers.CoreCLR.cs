@@ -102,7 +102,7 @@ namespace System.Runtime.CompilerServices
             Debug.Assert(!th.IsTypeDesc); // TypeDesc can't be used as generic parameter
             MethodTable* targetMT = th.AsMethodTable();
 
-            if (!targetMT->IsPrimitive) // Enum is included
+            if (!targetMT->IsPrimitive) // Enum is included // targetMT is NULL - CLAMP
                 throw new ArgumentException(SR.Argument_BadArrayForInitializeArray);
 
             uint targetTypeSize = targetMT->GetNumInstanceFieldBytes();

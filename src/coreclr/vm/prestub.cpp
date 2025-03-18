@@ -3629,6 +3629,7 @@ void ProcessDynamicDictionaryLookup(TransitionBlock *           pTransitionBlock
     STANDARD_VM_CONTRACT;
 
     TADDR genericContextPtr = *(TADDR*)GetFirstArgumentRegisterValuePtr(pTransitionBlock);
+    fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, (void*)genericContextPtr);
 
     pResult->signature = NULL;
     pResult->testForNull = false;
@@ -3650,7 +3651,7 @@ void ProcessDynamicDictionaryLookup(TransitionBlock *           pTransitionBlock
     }
     else
     {
-        pContextMT = (MethodTable*)genericContextPtr;
+        pContextMT = *(MethodTable**)genericContextPtr;
 
         if (kind == ENCODE_DICTIONARY_LOOKUP_THISOBJ)
         {
@@ -4067,6 +4068,7 @@ PCODE DynamicHelperFixup(TransitionBlock * pTransitionBlock, TADDR * pCell, DWOR
         case ENCODE_DICTIONARY_LOOKUP_TYPE:
         case ENCODE_DICTIONARY_LOOKUP_METHOD:
             {
+                fprintf(stderr, "[CLAMP] %s %d %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, ENCODE_DICTIONARY_LOOKUP_THISOBJ, ENCODE_DICTIONARY_LOOKUP_TYPE, ENCODE_DICTIONARY_LOOKUP_METHOD, kind);
                 pHelper = DynamicHelpers::CreateDictionaryLookupHelper(pModule->GetLoaderAllocator(), &genericLookup, dictionaryIndexAndSlot, pModule);
             }
             break;

@@ -372,7 +372,13 @@ class Object
     {
         LIMITED_METHOD_CONTRACT;
         _ASSERTE(!"GetOffsetOfFirstField");
-        return sizeof(Object);
+        return sizeof(ObjectInternal);
+    }
+
+    static UINT GetOffsetOfFirstFieldTmp()
+    {
+        LIMITED_METHOD_CONTRACT;
+        return sizeof(ObjectInternal);
     }
 
     DWORD   GetOffset32(DWORD dwOffset)
@@ -915,6 +921,10 @@ class StringObjectInternal : public ObjectInternal
     DWORD   m_StringLength;
     WCHAR   m_FirstChar;
 
+  private:
+    static STRINGREF* EmptyStringRefPtr;
+    static bool EmptyStringIsFrozen;
+
     friend struct ::cdac_data<StringObjectInternal>;
 };
 
@@ -1004,9 +1014,6 @@ class StringObject : public Object
 #endif
     }
 
-  private:
-    static STRINGREF* EmptyStringRefPtr;
-    static bool EmptyStringIsFrozen;
 };
 
 template<>
@@ -1033,7 +1040,7 @@ inline STRINGREF StringObject::GetEmptyString() {
         MODE_COOPERATIVE;
         GC_TRIGGERS;
     } CONTRACTL_END;
-    STRINGREF* refptr = EmptyStringRefPtr;
+    STRINGREF* refptr = StringObjectInternal::EmptyStringRefPtr;
 
     //If we've never gotten a reference to the EmptyString, we need to go get one.
     if (refptr==NULL) {
@@ -1051,7 +1058,7 @@ inline STRINGREF* StringObject::GetEmptyStringRefPtr(void** pinnedString) {
         GC_TRIGGERS;
     } CONTRACTL_END;
 
-    STRINGREF* refptr = EmptyStringRefPtr;
+    STRINGREF* refptr = StringObjectInternal::EmptyStringRefPtr;
 
     //If we've never gotten a reference to the EmptyString, we need to go get one.
     if (refptr == nullptr)
@@ -1059,7 +1066,7 @@ inline STRINGREF* StringObject::GetEmptyStringRefPtr(void** pinnedString) {
         refptr = InitEmptyStringRefPtr();
     }
 
-    if (EmptyStringIsFrozen && pinnedString != nullptr)
+    if (StringObjectInternal::EmptyStringIsFrozen && pinnedString != nullptr)
     {
         *pinnedString = *(void**)refptr;
     }
@@ -2061,15 +2068,15 @@ public:
 
     OBJECTREF GetTarget() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_target; }
     void SetTarget(OBJECTREF target) { WRAPPER_NO_CONTRACT; SetObjectReference(&((DelegateObjectInternal*)m_pObj)->_target, target); }
-    static int GetOffsetOfTarget() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfTarget"); return offsetof(DelegateObjectInternal, _target); }
+    static int GetOffsetOfTarget() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObjectInternal, _target); }
 
     PCODE GetMethodPtr() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_methodPtr; }
     void SetMethodPtr(PCODE methodPtr) { LIMITED_METHOD_CONTRACT; ((DelegateObjectInternal*)m_pObj)->_methodPtr = methodPtr; }
-    static int GetOffsetOfMethodPtr() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfMethodPtr"); return offsetof(DelegateObjectInternal, _methodPtr); }
+    static int GetOffsetOfMethodPtr() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObjectInternal, _methodPtr); }
 
     PCODE GetMethodPtrAux() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_methodPtrAux; }
     void SetMethodPtrAux(PCODE methodPtrAux) { LIMITED_METHOD_CONTRACT; ((DelegateObjectInternal*)m_pObj)->_methodPtrAux = methodPtrAux; }
-    static int GetOffsetOfMethodPtrAux() { LIMITED_METHOD_CONTRACT; _ASSERTE(!"GetOffsetOfMethodPtrAux"); return offsetof(DelegateObjectInternal, _methodPtrAux); }
+    static int GetOffsetOfMethodPtrAux() { LIMITED_METHOD_CONTRACT; return offsetof(DelegateObjectInternal, _methodPtrAux); }
 
     OBJECTREF GetInvocationList() { LIMITED_METHOD_CONTRACT; return ((DelegateObjectInternal*)m_pObj)->_invocationList; }
     void SetInvocationList(OBJECTREF invocationList) { WRAPPER_NO_CONTRACT; SetObjectReference(&((DelegateObjectInternal*)m_pObj)->_invocationList, invocationList); }

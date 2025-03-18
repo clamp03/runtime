@@ -559,7 +559,7 @@ namespace
     bool FeatureSwitchDisabled(LPCWSTR featureSwitch, bool enabledValue, bool defaultValue)
     {
         // If we don't have a feature switch, treat the switch as enabled.
-        return featureSwitch != nullptr && 
+        return featureSwitch != nullptr &&
             Configuration::GetKnobBooleanValue(featureSwitch, defaultValue) != enabledValue;
     }
 
@@ -659,7 +659,7 @@ void CoreLibBinder::Check()
 
             if (!pFD->IsFieldOfValueType())
             {
-                offset += Object::GetOffsetOfFirstField();
+                offset += Object::GetOffsetOfFirstFieldTmp();
             }
 
             CONSISTENCY_CHECK_MSGF(offset == p->expectedFieldOffset,

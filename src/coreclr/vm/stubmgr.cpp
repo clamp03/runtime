@@ -1177,10 +1177,10 @@ BOOL StubLinkStubManager::TraceDelegateObject(BYTE* pbDel, TraceDestination *tra
         // For the others the logic is the following:
         // if _methodPtrAux is 0 the target is in _methodPtr, otherwise the taret is _methodPtrAux
 
-        ppbDest = (BYTE **)(pbDel + DelegateObject::GetOffsetOfMethodPtrAux());
+        ppbDest = (BYTE **)(*pbDel + DelegateObject::GetOffsetOfMethodPtrAux());
         if (*ppbDest == NULL)
         {
-            ppbDest = (BYTE **)(pbDel + DelegateObject::GetOffsetOfMethodPtr());
+            ppbDest = (BYTE **)(*pbDel + DelegateObject::GetOffsetOfMethodPtr());
 
             if (*ppbDest == NULL)
             {
@@ -1207,7 +1207,7 @@ BOOL StubLinkStubManager::TraceDelegateObject(BYTE* pbDel, TraceDestination *tra
     if (pbCount == NULL)
     {
         // it's a static closed, the target lives in _methodAuxPtr
-        ppbDest = (BYTE **)(pbDel + DelegateObject::GetOffsetOfMethodPtrAux());
+        ppbDest = (BYTE **)(*pbDel + DelegateObject::GetOffsetOfMethodPtrAux());
 
         if (*ppbDest == NULL)
         {

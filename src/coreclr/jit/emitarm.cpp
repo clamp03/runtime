@@ -7942,6 +7942,15 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
         }
 
         GenTree* memBase = indir->Base();
+        regNumber newGCReg = memBase->GetRegNum();
+
+        printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, memBase->TypeGet() == TYP_REF);
+        if (memBase->TypeGet() == TYP_REF)
+        {
+            newGCReg = codeGen->internalRegisters.GetSingle(indir);
+            emitIns_R_R(INS_ldr, EA_PTRSIZE, newGCReg, memBase->GetRegNum()); // FEATURE_NEW_GC
+            emitIns(INS_nop);
+        }
 
         if (indir->HasIndex())
         {
@@ -7964,13 +7973,13 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
                     if (lsl > 0)
                     {
                         // Generate code to set tmpReg = base + index*scale
-                        emitIns_R_R_R_I(INS_add, leaBasePartialAddrAttr, tmpReg, memBase->GetRegNum(),
+                        emitIns_R_R_R_I(INS_add, leaBasePartialAddrAttr, tmpReg, newGCReg,
                                         index->GetRegNum(), lsl, INS_FLAGS_DONT_CARE, INS_OPTS_LSL);
                     }
                     else // no scale
                     {
                         // Generate code to set tmpReg = base + index
-                        emitIns_R_R_R(INS_add, leaBasePartialAddrAttr, tmpReg, memBase->GetRegNum(),
+                        emitIns_R_R_R(INS_add, leaBasePartialAddrAttr, tmpReg, newGCReg,
                                       index->GetRegNum());
                     }
 
@@ -7985,7 +7994,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
                     codeGen->instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, offset);
                     // Then add the base register
                     //      rd = rd + base
-                    emitIns_R_R_R(INS_add, leaBasePartialAddrAttr, tmpReg, tmpReg, memBase->GetRegNum());
+                    emitIns_R_R_R(INS_add, leaBasePartialAddrAttr, tmpReg, tmpReg, newGCReg);
 
                     noway_assert(emitInsIsLoad(ins) || (tmpReg != dataReg));
                     noway_assert(tmpReg != index->GetRegNum());
@@ -8000,13 +8009,13 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
                 if (lsl > 0)
                 {
                     // Then load/store dataReg from/to [memBase + index*scale]
-                    emitIns_R_R_R_I(ins, attr, dataReg, memBase->GetRegNum(), index->GetRegNum(), lsl,
+                    emitIns_R_R_R_I(ins, attr, dataReg, newGCReg, index->GetRegNum(), lsl,
                                     INS_FLAGS_DONT_CARE, INS_OPTS_LSL);
                 }
                 else // no scale
                 {
                     // Then load/store dataReg from/to [memBase + index]
-                    emitIns_R_R_R(ins, attr, dataReg, memBase->GetRegNum(), index->GetRegNum());
+                    emitIns_R_R_R(ins, attr, dataReg, newGCReg, index->GetRegNum());
                 }
             }
         }
@@ -8029,7 +8038,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
             else if (emitIns_valid_imm_for_ldst_offset(offset, attr))
             {
                 // Then load/store dataReg from/to [memBase + offset]
-                emitIns_R_R_I(ins, attr, dataReg, memBase->GetRegNum(), offset);
+                emitIns_R_R_I(ins, attr, dataReg, newGCReg, offset);
             }
             else
             {
@@ -8040,7 +8049,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
                 codeGen->instGen_Set_Reg_To_Imm(EA_PTRSIZE, tmpReg, offset);
 
                 // Then load/store dataReg from/to [memBase + tmpReg]
-                emitIns_R_R_R(ins, attr, dataReg, memBase->GetRegNum(), tmpReg);
+                emitIns_R_R_R(ins, attr, dataReg, newGCReg, tmpReg);
             }
         }
     }
@@ -8061,11 +8070,31 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
         if (offset != 0)
         {
             assert(emitIns_valid_imm_for_add(offset, INS_FLAGS_DONT_CARE));
-            emitIns_R_R_I(ins, attr, dataReg, addr->GetRegNum(), offset);
+            printf("[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, addr->OperIs(GT_LEA), addr->OperIs(GT_LEA) && addr->AsAddrMode()->Base()->TypeGet() == TYP_REF);
+            if (!addr->IsIconHandle() && addr->TypeGet() == TYP_REF)
+            {
+                emitIns_R_R(INS_ldr, EA_PTRSIZE, dataReg, addr->GetRegNum()); // FEATURE_NEW_GC
+                emitIns(INS_nop);
+                emitIns_R_R_I(ins, attr, dataReg, dataReg, offset);
+            }
+            else
+            {
+                emitIns_R_R_I(ins, attr, dataReg, addr->GetRegNum(), offset);
+            }
         }
         else
         {
-            emitIns_R_R(ins, attr, dataReg, addr->GetRegNum());
+            printf("[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, addr->OperIs(GT_LEA), addr->OperIs(GT_LEA) && addr->AsAddrMode()->Base()->TypeGet() == TYP_REF);
+            if (!addr->IsIconHandle() && addr->TypeGet() == TYP_REF)
+            {
+                emitIns_R_R(INS_ldr, EA_PTRSIZE, dataReg, addr->GetRegNum()); // FEATURE_NEW_GC
+                emitIns(INS_nop);
+                emitIns_R_R(ins, attr, dataReg, dataReg);
+            }
+            else
+            {
+                emitIns_R_R(ins, attr, dataReg, addr->GetRegNum());
+            }
         }
     }
 }
