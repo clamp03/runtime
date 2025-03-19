@@ -7153,6 +7153,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     optMethodFlags |= OMF_HAS_ARRAYREF;
                 }
 
+#if 0
 #ifdef FEATURE_NEW_GC
                 if (opcode == CEE_LDELEM_I || opcode == CEE_LDELEM_I4)
                 {
@@ -7163,6 +7164,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     break;
                 }
 #endif // FEATURE_NEW_GC
+#endif
 
                 op1 = gtNewArrayIndexAddr(op1, op2, lclTyp, ldelemClsHnd);
 
@@ -7270,6 +7272,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     optMethodFlags |= OMF_HAS_ARRAYREF;
                 }
 
+#if 0
 #ifdef FEATURE_NEW_GC
                 if (opcode == CEE_STELEM_I || opcode == CEE_STELEM_I4)
                 {
@@ -7278,6 +7281,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     goto SPILL_APPEND;
                 }
 #endif // FEATURE_NEW_GC
+#endif
 
                 // Create the index address node.
                 op1 = gtNewArrayIndexAddr(op3, op1, lclTyp, stelemClsHnd);

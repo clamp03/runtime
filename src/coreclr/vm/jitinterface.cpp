@@ -3078,7 +3078,7 @@ void CEEInfo::ComputeRuntimeLookupForSharedGenericToken(DictionaryEntryKind entr
             IfFailThrow(sigptr.GetElemType(&type));
             if (type == ELEMENT_TYPE_VAR)
             {
-                pResult->indirections = 3;
+                pResult->indirections = 3; // HERE
                 pResult->testForNull = 0;
                 pResult->offsets[0] = MethodTable::GetOffsetOfPerInstInfo();
                 pResult->offsets[1] = sizeof(TypeHandle*) * (pContextMT->GetNumDicts() - 1);

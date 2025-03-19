@@ -704,6 +704,7 @@ int LinearScan::BuildNode(GenTree* tree)
         case GT_INDEX_ADDR:
             dstCount = 1;
             buildInternalIntRegisterDefForNode(tree);
+            buildInternalIntRegisterDefForNode(tree);
             srcCount = BuildBinaryUses(tree->AsOp());
             assert(srcCount == 2);
             buildInternalRegisterUses();

@@ -1709,13 +1709,24 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
     assert(index->isUsedFromReg());
 
     const regNumber tmpReg = internalRegisters.Extract(node);
+    regNumber tmpBaseReg = internalRegisters.Extract(node);
 
     regNumber indexReg = index->GetRegNum();
+
+    if (base->TypeGet() == TYP_REF) // FEATURE_NEW_GC. AFTER THIS FRAGILE ADDRESS IS SAVED TO node->GetRegNum()
+    {
+        GetEmitter()->emitIns_R_R(INS_ldr, EA_PTRSIZE, tmpBaseReg, base->GetRegNum());
+        assert(tmpBaseReg != indexReg);
+    }
+    else
+    {
+        tmpBaseReg = base->GetRegNum();
+    }
 
     // Generate the bounds check if necessary.
     if (node->IsBoundsChecked())
     {
-        GetEmitter()->emitIns_R_R_I(INS_ldr, EA_4BYTE, tmpReg, base->GetRegNum(), node->gtLenOffset);
+        GetEmitter()->emitIns_R_R_I(INS_ldr, EA_4BYTE, tmpReg, tmpBaseReg, node->gtLenOffset);
         GetEmitter()->emitIns_R_R(INS_cmp, emitActualTypeSize(index->TypeGet()), indexReg, tmpReg);
         genJumpToThrowHlpBlk(EJ_hs, SCK_RNGCHK_FAIL, node->gtIndRngFailBB);
     }
@@ -1733,7 +1744,7 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
             if (scale <= 4)
             {
                 // target = base + index<<scale
-                GetEmitter()->emitIns_R_R_R_I(INS_add, emitActualTypeSize(node), node->GetRegNum(), base->GetRegNum(),
+                GetEmitter()->emitIns_R_R_R_I(INS_add, emitActualTypeSize(node), node->GetRegNum(), tmpBaseReg,
                                               indexReg, scale, INS_OPTS_UXTW);
             }
             else
@@ -1741,14 +1752,14 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
                 GetEmitter()->emitIns_Mov(INS_mov, EA_4BYTE, tmpReg, indexReg, /* canSkip */ false);
                 indexReg      = tmpReg;
                 emitter* emit = GetEmitter();
-                genScaledAdd(emitActualTypeSize(node), node->GetRegNum(), base->GetRegNum(), indexReg, scale);
+                genScaledAdd(emitActualTypeSize(node), node->GetRegNum(), tmpBaseReg, indexReg, scale);
             }
         }
         else
 #endif // TARGET_ARM64
         {
             // dest = base + index * scale
-            genScaledAdd(emitActualTypeSize(node), node->GetRegNum(), base->GetRegNum(), indexReg, scale);
+            genScaledAdd(emitActualTypeSize(node), node->GetRegNum(), tmpBaseReg, indexReg, scale);
         }
     }
     else // we have to load the element size and use a MADD (multiply-add) instruction
@@ -1767,7 +1778,7 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
 
         // dest = index * tmpReg + base
         GetEmitter()->emitIns_R_R_R_R(INS_MULADD, emitActualTypeSize(node), node->GetRegNum(), indexReg, tmpReg,
-                                      base->GetRegNum());
+                                      tmpBaseReg);
     }
 
     // dest = dest + elemOffs

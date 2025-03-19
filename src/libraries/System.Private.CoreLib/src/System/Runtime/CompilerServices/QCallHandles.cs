@@ -10,7 +10,7 @@ namespace System.Runtime.CompilerServices
     // Wrapper for address of a string variable on stack
     internal unsafe ref struct StringHandleOnStack
     {
-        private void* _ptr;
+        private void* _ptr; // CHECK need to concurrent gc.
 
         internal StringHandleOnStack(ref string? s)
         {
