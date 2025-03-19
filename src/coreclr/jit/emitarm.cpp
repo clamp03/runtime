@@ -7944,7 +7944,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
         GenTree* memBase = indir->Base();
         regNumber newGCReg = memBase->GetRegNum();
 
-        printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, memBase->TypeGet() == TYP_REF);
+        // printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, memBase->TypeGet() == TYP_REF);
         if (memBase->TypeGet() == TYP_REF)
         {
             newGCReg = codeGen->internalRegisters.GetSingle(indir);
@@ -8070,7 +8070,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
         if (offset != 0)
         {
             assert(emitIns_valid_imm_for_add(offset, INS_FLAGS_DONT_CARE));
-            printf("[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, addr->OperIs(GT_LEA), addr->OperIs(GT_LEA) && addr->AsAddrMode()->Base()->TypeGet() == TYP_REF);
+            //printf("[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, addr->OperIs(GT_LEA), addr->OperIs(GT_LEA) && addr->AsAddrMode()->Base()->TypeGet() == TYP_REF);
             if (!addr->IsIconHandle() && addr->TypeGet() == TYP_REF)
             {
                 emitIns_R_R(INS_ldr, EA_PTRSIZE, dataReg, addr->GetRegNum()); // FEATURE_NEW_GC
@@ -8084,7 +8084,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
         }
         else
         {
-            printf("[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, addr->OperIs(GT_LEA), addr->OperIs(GT_LEA) && addr->AsAddrMode()->Base()->TypeGet() == TYP_REF);
+            //printf("[CLAMP] %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, addr->OperIs(GT_LEA), addr->OperIs(GT_LEA) && addr->AsAddrMode()->Base()->TypeGet() == TYP_REF);
             if (!addr->IsIconHandle() && addr->TypeGet() == TYP_REF)
             {
                 emitIns_R_R(INS_ldr, EA_PTRSIZE, dataReg, addr->GetRegNum()); // FEATURE_NEW_GC
@@ -8150,6 +8150,11 @@ regNumber emitter::emitInsTernary(instruction ins, emitAttr attr, GenTree* dst, 
     }
     else // not floating point
     {
+        if (dst->TypeGet() == TYP_BYREF && src1->TypeGet() == TYP_REF)
+        { // FEATURE_NEW_GC
+            printf("[CLAMP] %s %d ADDITIONAL LDR for ARITHMETIC\n", __PRETTY_FUNCTION__, __LINE__);
+            emitIns_R_R(INS_ldr, EA_PTRSIZE, src1->GetRegNum(), src1->GetRegNum()); // FEATURE_NEW_GC
+        }
         // src2 can be immed or reg
         assert(!src2->isContained() || src2->isContainedIntOrIImmed());
 
