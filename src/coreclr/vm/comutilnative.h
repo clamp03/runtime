@@ -101,7 +101,7 @@ struct GCGenerationInfo
 };
 
 #include "pshpack4.h"
-class GCMemoryInfoData : public Object
+class GCMemoryInfoDataInternal : public ObjectInternal
 {
 public:
     UINT64 highMemLoadThresholdBytes;
@@ -128,6 +128,10 @@ public:
     GCGenerationInfo generationInfo4;
     UINT64 pauseDuration0;
     UINT64 pauseDuration1;
+};
+
+class GCMemoryInfoData : public Object
+{
 };
 #include "poppack.h"
 

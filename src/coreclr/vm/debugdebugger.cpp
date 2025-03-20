@@ -312,7 +312,7 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
 
     data.pDomain = GetAppDomain();
 
-    data.NumFramesRequested = gc.pStackFrameHelper->iFrameCount;
+    data.NumFramesRequested = ((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->iFrameCount;
 
     if (gc.pException == NULL)
     {
@@ -330,7 +330,7 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
 
     if (data.cElements == 0)
     {
-        gc.pStackFrameHelper->iFrameCount = 0;
+        ((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->iFrameCount = 0;
     }
     else
     {
@@ -344,59 +344,59 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
 
         // Allocate memory for the MethodInfo objects
         BASEARRAYREF methodInfoArray = (BASEARRAYREF) AllocatePrimitiveArray(ELEMENT_TYPE_I, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgMethodHandle), (OBJECTREF)methodInfoArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgMethodHandle), (OBJECTREF)methodInfoArray);
 
         // Allocate memory for the Offsets
         OBJECTREF offsets = AllocatePrimitiveArray(ELEMENT_TYPE_I4, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiOffset), (OBJECTREF)offsets);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiOffset), (OBJECTREF)offsets);
 
         // Allocate memory for the ILOffsets
         OBJECTREF ilOffsets = AllocatePrimitiveArray(ELEMENT_TYPE_I4, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiILOffset), (OBJECTREF)ilOffsets);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiILOffset), (OBJECTREF)ilOffsets);
 
         // Allocate memory for the array of assembly file names
         PTRARRAYREF assemblyPathArray = (PTRARRAYREF) AllocateObjectArray(data.cElements, g_pStringClass);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgAssemblyPath), (OBJECTREF)assemblyPathArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgAssemblyPath), (OBJECTREF)assemblyPathArray);
 
         // Allocate memory for the array of assemblies
         PTRARRAYREF assemblyArray = (PTRARRAYREF) AllocateObjectArray(data.cElements, g_pObjectClass);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgAssembly), (OBJECTREF)assemblyArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgAssembly), (OBJECTREF)assemblyArray);
 
         // Allocate memory for the LoadedPeAddress
         BASEARRAYREF loadedPeAddressArray = (BASEARRAYREF) AllocatePrimitiveArray(ELEMENT_TYPE_I, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgLoadedPeAddress), (OBJECTREF)loadedPeAddressArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgLoadedPeAddress), (OBJECTREF)loadedPeAddressArray);
 
         // Allocate memory for the LoadedPeSize
         OBJECTREF loadedPeSizeArray = AllocatePrimitiveArray(ELEMENT_TYPE_I4, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiLoadedPeSize), (OBJECTREF)loadedPeSizeArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiLoadedPeSize), (OBJECTREF)loadedPeSizeArray);
 
         // Allocate memory for the IsFileLayout flags
         OBJECTREF isFileLayouts = AllocatePrimitiveArray(ELEMENT_TYPE_BOOLEAN, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiIsFileLayout), (OBJECTREF)isFileLayouts);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiIsFileLayout), (OBJECTREF)isFileLayouts);
 
         // Allocate memory for the InMemoryPdbAddress
         BASEARRAYREF inMemoryPdbAddressArray = (BASEARRAYREF) AllocatePrimitiveArray(ELEMENT_TYPE_I, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgInMemoryPdbAddress), (OBJECTREF)inMemoryPdbAddressArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgInMemoryPdbAddress), (OBJECTREF)inMemoryPdbAddressArray);
 
         // Allocate memory for the InMemoryPdbSize
         OBJECTREF inMemoryPdbSizeArray = AllocatePrimitiveArray(ELEMENT_TYPE_I4, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiInMemoryPdbSize), (OBJECTREF)inMemoryPdbSizeArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiInMemoryPdbSize), (OBJECTREF)inMemoryPdbSizeArray);
 
         // Allocate memory for the MethodTokens
         OBJECTREF methodTokens = AllocatePrimitiveArray(ELEMENT_TYPE_I4, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiMethodToken), (OBJECTREF)methodTokens);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiMethodToken), (OBJECTREF)methodTokens);
 
         // Allocate memory for the Filename string objects
         PTRARRAYREF filenameArray = (PTRARRAYREF) AllocateObjectArray(data.cElements, g_pStringClass);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgFilename), (OBJECTREF)filenameArray);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgFilename), (OBJECTREF)filenameArray);
 
         // Allocate memory for the LineNumbers
         OBJECTREF lineNumbers = AllocatePrimitiveArray(ELEMENT_TYPE_I4, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiLineNumber), (OBJECTREF)lineNumbers);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiLineNumber), (OBJECTREF)lineNumbers);
 
         // Allocate memory for the ColumnNumbers
         OBJECTREF columnNumbers = AllocatePrimitiveArray(ELEMENT_TYPE_I4, data.cElements);
-        SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiColumnNumber), (OBJECTREF)columnNumbers);
+        SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiColumnNumber), (OBJECTREF)columnNumbers);
 
         // Allocate memory for the flag indicating if this frame represents the last one from a foreign
         // exception stack trace provided we have any such frames. Otherwise, set it to null.
@@ -410,11 +410,11 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
         {
             IsLastFrameFromForeignStackTraceFlags = AllocatePrimitiveArray(ELEMENT_TYPE_BOOLEAN, data.cElements);
 
-            SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiLastFrameFromForeignExceptionStackTrace), (OBJECTREF)IsLastFrameFromForeignStackTraceFlags);
+            SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiLastFrameFromForeignExceptionStackTrace), (OBJECTREF)IsLastFrameFromForeignStackTraceFlags);
         }
         else
         {
-            SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->rgiLastFrameFromForeignExceptionStackTrace), NULL);
+            SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiLastFrameFromForeignExceptionStackTrace), NULL);
         }
 
         // Determine if there are any dynamic methods in the stack trace.  If there are,
@@ -438,7 +438,7 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
         if (iNumDynamics)
         {
             PTRARRAYREF dynamicDataArray = (PTRARRAYREF) AllocateObjectArray(iNumDynamics, g_pObjectClass);
-            SetObjectReference( (OBJECTREF *)&(gc.pStackFrameHelper->dynamicMethods), (OBJECTREF)dynamicDataArray);
+            SetObjectReference( (OBJECTREF *)&(((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->dynamicMethods), (OBJECTREF)dynamicDataArray);
         }
 
         int iNumValidFrames = 0;
@@ -454,25 +454,25 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
             _ASSERTE(pFunc->IsRuntimeMethodHandle());
 
             // Method handle
-            size_t *pElem = (size_t*)gc.pStackFrameHelper->rgMethodHandle->GetDataPtr();
+            size_t *pElem = (size_t*)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgMethodHandle->GetDataPtr();
             pElem[iNumValidFrames] = (size_t)pFunc;
 
             // Native offset
-            CLR_I4 *pI4 = (CLR_I4 *)((I4ARRAYREF)gc.pStackFrameHelper->rgiOffset)->GetDirectPointerToNonObjectElements();
+            CLR_I4 *pI4 = (CLR_I4 *)((I4ARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiOffset)->GetDirectPointerToNonObjectElements();
             pI4[iNumValidFrames] = data.pElements[i].dwOffset;
 
             // IL offset
-            CLR_I4 *pILI4 = (CLR_I4 *)((I4ARRAYREF)gc.pStackFrameHelper->rgiILOffset)->GetDirectPointerToNonObjectElements();
+            CLR_I4 *pILI4 = (CLR_I4 *)((I4ARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiILOffset)->GetDirectPointerToNonObjectElements();
             pILI4[iNumValidFrames] = data.pElements[i].dwILOffset;
 
             // Assembly
             OBJECTREF pAssembly = pFunc->GetAssembly()->GetExposedObject();
-            gc.pStackFrameHelper->rgAssembly->SetAt(iNumValidFrames, pAssembly);
+            ((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgAssembly->SetAt(iNumValidFrames, pAssembly);
 
             if (data.fDoWeHaveAnyFramesFromForeignStackTrace)
             {
                 // Set the BOOL indicating if the frame represents the last frame from a foreign exception stack trace.
-                CLR_U1 *pIsLastFrameFromForeignExceptionStackTraceU1 = (CLR_U1 *)((BOOLARRAYREF)gc.pStackFrameHelper->rgiLastFrameFromForeignExceptionStackTrace)
+                CLR_U1 *pIsLastFrameFromForeignExceptionStackTraceU1 = (CLR_U1 *)((BOOLARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiLastFrameFromForeignExceptionStackTrace)
                                             ->GetDirectPointerToNonObjectElements();
                 pIsLastFrameFromForeignExceptionStackTraceU1 [iNumValidFrames] = (CLR_U1)(data.pElements[i].flags & STEF_LAST_FRAME_FROM_FOREIGN_STACK_TRACE);
             }
@@ -489,13 +489,13 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
                     OBJECTREF pResolver = pDMD->GetLCGMethodResolver()->GetManagedResolver();
                     _ASSERTE(pResolver != NULL);
 
-                    ((PTRARRAYREF)gc.pStackFrameHelper->dynamicMethods)->SetAt(iCurDynamic++, pResolver);
+                    ((PTRARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->dynamicMethods)->SetAt(iCurDynamic++, pResolver);
                 }
                 else if (pMethod->GetMethodTable()->Collectible())
                 {
                     OBJECTREF pLoaderAllocator = pMethod->GetMethodTable()->GetLoaderAllocator()->GetExposedObject();
                     _ASSERTE(pLoaderAllocator != NULL);
-                    ((PTRARRAYREF)gc.pStackFrameHelper->dynamicMethods)->SetAt(iCurDynamic++, pLoaderAllocator);
+                    ((PTRARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->dynamicMethods)->SetAt(iCurDynamic++, pLoaderAllocator);
                 }
             }
 
@@ -711,15 +711,15 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
                     if (fFileInfoSet)
                     {
                         // Set the line and column numbers
-                        CLR_I4 *pI4Line = (CLR_I4 *)((I4ARRAYREF)gc.pStackFrameHelper->rgiLineNumber)->GetDirectPointerToNonObjectElements();
+                        CLR_I4 *pI4Line = (CLR_I4 *)((I4ARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiLineNumber)->GetDirectPointerToNonObjectElements();
                         pI4Line[iNumValidFrames] = sourceLine;
 
-                        CLR_I4 *pI4Column = (CLR_I4 *)((I4ARRAYREF)gc.pStackFrameHelper->rgiColumnNumber)->GetDirectPointerToNonObjectElements();
+                        CLR_I4 *pI4Column = (CLR_I4 *)((I4ARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiColumnNumber)->GetDirectPointerToNonObjectElements();
                         pI4Column[iNumValidFrames] = sourceColumn;
 
                         // Set the file name
                         OBJECTREF obj = (OBJECTREF) StringObject::NewString(wszFileName);
-                        gc.pStackFrameHelper->rgFilename->SetAt(iNumValidFrames, obj);
+                        ((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgFilename->SetAt(iNumValidFrames, obj);
                     }
                 }
 
@@ -729,7 +729,7 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
 #endif // FEATURE_ISYM_READER
                 {
                     // Save MethodToken for the function
-                    CLR_I4 *pMethodToken = (CLR_I4 *)((I4ARRAYREF)gc.pStackFrameHelper->rgiMethodToken)->GetDirectPointerToNonObjectElements();
+                    CLR_I4 *pMethodToken = (CLR_I4 *)((I4ARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiMethodToken)->GetDirectPointerToNonObjectElements();
                     pMethodToken[iNumValidFrames] = pMethod->GetMemberDef();
 
                     PEAssembly *pPEAssembly = pModule->GetPEAssembly();
@@ -739,17 +739,17 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
                     PTR_CVOID peAddress = pPEAssembly->GetLoadedImageContents(&peSize);
 
                     // Save the PE address and size
-                    PTR_CVOID *pLoadedPeAddress = (PTR_CVOID *)gc.pStackFrameHelper->rgLoadedPeAddress->GetDataPtr();
+                    PTR_CVOID *pLoadedPeAddress = (PTR_CVOID *)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgLoadedPeAddress->GetDataPtr();
                     pLoadedPeAddress[iNumValidFrames] = peAddress;
 
-                    CLR_I4 *pLoadedPeSize = (CLR_I4 *)((I4ARRAYREF)gc.pStackFrameHelper->rgiLoadedPeSize)->GetDirectPointerToNonObjectElements();
+                    CLR_I4 *pLoadedPeSize = (CLR_I4 *)((I4ARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiLoadedPeSize)->GetDirectPointerToNonObjectElements();
                     pLoadedPeSize[iNumValidFrames] = (CLR_I4)peSize;
 
                     // Set flag indicating PE file in memory has the on disk layout
                     if (!pPEAssembly->IsReflectionEmit())
                     {
                         // This flag is only available for non-dynamic assemblies.
-                        CLR_U1 *pIsFileLayout = (CLR_U1 *)((BOOLARRAYREF)gc.pStackFrameHelper->rgiIsFileLayout)->GetDirectPointerToNonObjectElements();
+                        CLR_U1 *pIsFileLayout = (CLR_U1 *)((BOOLARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiIsFileLayout)->GetDirectPointerToNonObjectElements();
                         pIsFileLayout[iNumValidFrames] = (CLR_U1) pPEAssembly->GetLoadedLayout()->IsFlat();
                     }
 
@@ -760,10 +760,10 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
                         MemoryRange range = stream->GetRawBuffer();
 
                         // Save the in-memory PDB address and size
-                        PTR_VOID *pInMemoryPdbAddress = (PTR_VOID *)gc.pStackFrameHelper->rgInMemoryPdbAddress->GetDataPtr();
+                        PTR_VOID *pInMemoryPdbAddress = (PTR_VOID *)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgInMemoryPdbAddress->GetDataPtr();
                         pInMemoryPdbAddress[iNumValidFrames] = range.StartAddress();
 
-                        CLR_I4 *pInMemoryPdbSize = (CLR_I4 *)((I4ARRAYREF)gc.pStackFrameHelper->rgiInMemoryPdbSize)->GetDirectPointerToNonObjectElements();
+                        CLR_I4 *pInMemoryPdbSize = (CLR_I4 *)((I4ARRAYREF)((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgiInMemoryPdbSize)->GetDirectPointerToNonObjectElements();
                         pInMemoryPdbSize[iNumValidFrames] = (CLR_I4)range.Size();
                     }
                     else
@@ -773,7 +773,7 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
                         if (!assemblyPath.IsEmpty())
                         {
                             OBJECTREF obj = (OBJECTREF)StringObject::NewString(assemblyPath.GetUnicode());
-                            gc.pStackFrameHelper->rgAssemblyPath->SetAt(iNumValidFrames, obj);
+                            ((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->rgAssemblyPath->SetAt(iNumValidFrames, obj);
                         }
                     }
                 }
@@ -782,7 +782,7 @@ extern "C" void QCALLTYPE StackTrace_GetStackFramesInternal(
             iNumValidFrames++;
         }
 
-        gc.pStackFrameHelper->iFrameCount = iNumValidFrames;
+        ((StackFrameHelperInternal*)gc.pStackFrameHelper->m_pObj)->iFrameCount = iNumValidFrames;
     }
 
     GCPROTECT_END();

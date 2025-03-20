@@ -20,7 +20,7 @@ extern "C" void QCALLTYPE DebugDebugger_CustomNotification(QCall::ObjectHandleOn
 extern "C" BOOL QCALLTYPE DebugDebugger_IsLoggingHelper();
 extern "C" BOOL QCALLTYPE DebugDebugger_IsManagedDebuggerAttached();
 
-class StackFrameHelper : public Object
+class StackFrameHelperInternal : public ObjectInternal
 {
     // READ ME:
     // Modifying the order or fields of this object may require other changes to the
@@ -46,7 +46,10 @@ public:
     BOOLARRAYREF rgiLastFrameFromForeignExceptionStackTrace;
 
     int iFrameCount;
+};
 
+class StackFrameHelper : public Object
+{
 protected:
     StackFrameHelper() {}
     ~StackFrameHelper() {}
@@ -54,12 +57,12 @@ protected:
 public:
     void SetFrameCount(int iCount)
     {
-        iFrameCount = iCount;
+        ((StackFrameHelperInternal*)m_pObj)->iFrameCount = iCount;
     }
 
     int  GetFrameCount(void)
     {
-        return iFrameCount;
+        return ((StackFrameHelperInternal*)m_pObj)->iFrameCount;
     }
 
 };

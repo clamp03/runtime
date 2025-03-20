@@ -469,7 +469,9 @@ typedef DPTR(uint8_t)   PTR_uint8_t;
 class ObjHeader;
 class MethodTable;
 class Object;
+class ObjectInternal;
 class ArrayBase;
+class ArrayBaseInternal;
 
 typedef DPTR(Object) PTR_Object;
 typedef DPTR(PTR_Object) PTR_PTR_Object;

@@ -40,13 +40,9 @@ typedef DPTR(RuntimeMethodBody) RUNTIMEMETHODBODYREF;
 typedef DPTR(RuntimeLocalVariableInfo) RUNTIMELOCALVARIABLEINFOREF;
 #endif
 
-class RuntimeExceptionHandlingClause : public Object
+class RuntimeExceptionHandlingClauseInternal : public ObjectInternal
 {
 public:
-    // Disallow creation and copy construction of these.
-    RuntimeExceptionHandlingClause() = delete;
-    RuntimeExceptionHandlingClause(const RuntimeExceptionHandlingClause&)  = delete;
-
     RUNTIMEMETHODBODYREF _methodBody;
     CorExceptionFlag _flags;
     INT32 _tryOffset;
@@ -57,13 +53,17 @@ public:
     INT32 _filterOffset;
 };
 
-class RuntimeMethodBody : public Object
+class RuntimeExceptionHandlingClause : public Object
 {
 public:
     // Disallow creation and copy construction of these.
-    RuntimeMethodBody() = delete;
-    RuntimeMethodBody(const RuntimeMethodBody&) = delete;
+    RuntimeExceptionHandlingClause() = delete;
+    RuntimeExceptionHandlingClause(const RuntimeExceptionHandlingClause&)  = delete;
+};
 
+class RuntimeMethodBodyInternal : public ObjectInternal
+{
+public:
     U1ARRAYREF _IL;
     PTRARRAYREF _exceptionClauses;
     PTRARRAYREF _localVariables;
@@ -72,6 +72,22 @@ public:
     INT32 _localVarSigToken;
     INT32 _maxStackSize;
     CLR_BOOL _initLocals;
+};
+
+class RuntimeMethodBody : public Object
+{
+public:
+    // Disallow creation and copy construction of these.
+    RuntimeMethodBody() = delete;
+    RuntimeMethodBody(const RuntimeMethodBody&) = delete;
+};
+
+class RuntimeLocalVariableInfoInternal : public ObjectInternal
+{
+public:
+    OBJECTREF _type;
+    INT32 _localIndex;
+    CLR_BOOL _isPinned;
 };
 
 class RuntimeLocalVariableInfo : public Object
@@ -83,17 +99,14 @@ public:
 
     REFLECTCLASSBASEREF GetType()
     {
-        return (REFLECTCLASSBASEREF)_type;
+        return (REFLECTCLASSBASEREF)((RuntimeLocalVariableInfoInternal*)m_pObj)->_type;
     }
 
     void SetType(OBJECTREF type)
     {
-        SetObjectReference(&_type, type);
+        SetObjectReference(&((RuntimeLocalVariableInfoInternal*)m_pObj)->_type, type);
     }
 
-    OBJECTREF _type;
-    INT32 _localIndex;
-    CLR_BOOL _isPinned;
 };
 
 extern "C" BOOL QCALLTYPE MdUtf8String_EqualsCaseInsensitive(LPCUTF8 szLhs, LPCUTF8 szRhs, INT32 stringNumBytes);
@@ -312,6 +325,25 @@ extern "C" void QCALLTYPE Signature_GetCustomModifiersAtOffset(
     BOOL fRequired,
     QCall::ObjectHandleOnStack result);
 
+class SignatureNativeInternal : public ObjectInternal
+{
+    friend class SignatureNative;
+public:
+    // Mirrored in the managed world (System.Signature)
+    //
+    // this is the layout the classloader chooses by default for the managed struct.
+    //
+    PTRARRAYREF _arguments;
+    REFLECTCLASSBASEREF _declaringType;
+    OBJECTREF _returnTypeORfieldType;
+    OBJECTREF _keepAlive;
+    PCCOR_SIGNATURE _sig;
+    DWORD _csig;
+    INT32 _managedCallingConventionAndArgIteratorFlags;
+    INT32 _nSizeOfArgStack;
+    MethodDesc* _pMethod;
+};
+
 class SignatureNative : public Object
 {
     friend void QCALLTYPE Signature_Init(
@@ -328,8 +360,8 @@ public:
 
     static FCDECL3(INT32, GetCallingConventionFromFunctionPointerAtOffsetInternal, PCCOR_SIGNATURE sig, DWORD csig, INT32 offset);
 
-    BOOL HasThis() { LIMITED_METHOD_CONTRACT; return (_managedCallingConventionAndArgIteratorFlags & CALLCONV_HasThis); }
-    INT32 NumFixedArgs() { WRAPPER_NO_CONTRACT; return _arguments->GetNumComponents(); }
+    BOOL HasThis() { LIMITED_METHOD_CONTRACT; return (((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags & CALLCONV_HasThis); }
+    INT32 NumFixedArgs() { WRAPPER_NO_CONTRACT; return ((SignatureNativeInternal*)m_pObj)->_arguments->GetNumComponents(); }
     TypeHandle GetReturnTypeHandle()
     {
         CONTRACTL {
@@ -339,11 +371,11 @@ public:
         }
         CONTRACTL_END;
 
-        return ((REFLECTCLASSBASEREF)_returnTypeORfieldType)->GetType();
+        return ((REFLECTCLASSBASEREF)((SignatureNativeInternal*)m_pObj)->_returnTypeORfieldType)->GetType();
     }
 
-    PCCOR_SIGNATURE GetCorSig() { LIMITED_METHOD_CONTRACT; return _sig; }
-    DWORD GetCorSigSize() { LIMITED_METHOD_CONTRACT; return _csig; }
+    PCCOR_SIGNATURE GetCorSig() { LIMITED_METHOD_CONTRACT; return ((SignatureNativeInternal*)m_pObj)->_sig; }
+    DWORD GetCorSigSize() { LIMITED_METHOD_CONTRACT; return ((SignatureNativeInternal*)m_pObj)->_csig; }
     Module* GetModule() { WRAPPER_NO_CONTRACT; return GetDeclaringType().GetModule(); }
 
     TypeHandle GetArgumentAt(INT32 position)
@@ -355,31 +387,31 @@ public:
         }
         CONTRACTL_END;
 
-        REFLECTCLASSBASEREF refArgument = (REFLECTCLASSBASEREF)_arguments->GetAt(position);
+        REFLECTCLASSBASEREF refArgument = (REFLECTCLASSBASEREF)((SignatureNativeInternal*)m_pObj)->_arguments->GetAt(position);
         return refArgument->GetType();
     }
 
     DWORD GetArgIteratorFlags()
     {
         LIMITED_METHOD_CONTRACT;
-        return VolatileLoad(&_managedCallingConventionAndArgIteratorFlags) >> CALLCONV_ArgIteratorFlags_Shift;
+        return VolatileLoad(&((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags) >> CALLCONV_ArgIteratorFlags_Shift;
     }
 
     INT32 GetSizeOfArgStack()
     {
         LIMITED_METHOD_CONTRACT;
-        return _nSizeOfArgStack;
+        return ((SignatureNativeInternal*)m_pObj)->_nSizeOfArgStack;
     }
 
     TypeHandle GetDeclaringType()
     {
         LIMITED_METHOD_CONTRACT;
-        return _declaringType->GetType();
+        return ((SignatureNativeInternal*)m_pObj)->_declaringType->GetType();
     }
     MethodDesc* GetMethod()
     {
         LIMITED_METHOD_CONTRACT;
-        return _pMethod;
+        return ((SignatureNativeInternal*)m_pObj)->_pMethod;
     }
 
     const SigTypeContext * GetTypeContext(SigTypeContext *pTypeContext)
@@ -392,9 +424,9 @@ public:
         }
         CONTRACTL_END;
 
-       _ASSERTE(_pMethod || !GetDeclaringType().IsNull());
-        if (_pMethod)
-            return SigTypeContext::GetOptionalTypeContext(_pMethod, GetDeclaringType(), pTypeContext);
+       _ASSERTE(((SignatureNativeInternal*)m_pObj)->_pMethod || !GetDeclaringType().IsNull());
+        if (((SignatureNativeInternal*)m_pObj)->_pMethod)
+            return SigTypeContext::GetOptionalTypeContext(((SignatureNativeInternal*)m_pObj)->_pMethod, GetDeclaringType(), pTypeContext);
         else
             return SigTypeContext::GetOptionalTypeContext(GetDeclaringType(), pTypeContext);
     }
@@ -408,7 +440,7 @@ private:
             MODE_COOPERATIVE;
         }
         CONTRACTL_END;
-        SetObjectReference(&_returnTypeORfieldType, returnType);
+        SetObjectReference(&((SignatureNativeInternal*)m_pObj)->_returnTypeORfieldType, returnType);
     }
 
     void SetKeepAlive(OBJECTREF keepAlive)
@@ -419,7 +451,7 @@ private:
             MODE_COOPERATIVE;
         }
         CONTRACTL_END;
-        SetObjectReference(&_keepAlive, keepAlive);
+        SetObjectReference(&((SignatureNativeInternal*)m_pObj)->_keepAlive, keepAlive);
     }
 
     void SetArgumentArray(PTRARRAYREF ptrArrayarguments)
@@ -430,7 +462,7 @@ private:
             MODE_COOPERATIVE;
         }
         CONTRACTL_END;
-        SetObjectReference((OBJECTREF*)&_arguments, (OBJECTREF)ptrArrayarguments);
+        SetObjectReference((OBJECTREF*)&((SignatureNativeInternal*)m_pObj)->_arguments, (OBJECTREF)ptrArrayarguments);
     }
 
     void SetArgument(INT32 argument, OBJECTREF argumentType)
@@ -442,19 +474,19 @@ private:
         }
         CONTRACTL_END;
 
-        _arguments->SetAt(argument, argumentType);
+        ((SignatureNativeInternal*)m_pObj)->_arguments->SetAt(argument, argumentType);
     }
 
     void SetArgIteratorFlags(DWORD flags)
     {
         LIMITED_METHOD_CONTRACT;
-        return VolatileStore(&_managedCallingConventionAndArgIteratorFlags, (INT32)(_managedCallingConventionAndArgIteratorFlags | (flags << CALLCONV_ArgIteratorFlags_Shift)));
+        return VolatileStore(&((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags, (INT32)(((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags | (flags << CALLCONV_ArgIteratorFlags_Shift)));
     }
 
     void SetSizeOfArgStack(INT32 nSizeOfArgStack)
     {
         LIMITED_METHOD_CONTRACT;
-        _nSizeOfArgStack = nSizeOfArgStack;
+        ((SignatureNativeInternal*)m_pObj)->_nSizeOfArgStack = nSizeOfArgStack;
     }
 
     void SetCallingConvention(INT32 mdCallingConvention)
@@ -462,30 +494,16 @@ private:
         LIMITED_METHOD_CONTRACT;
 
         if ((mdCallingConvention & IMAGE_CEE_CS_CALLCONV_MASK) == IMAGE_CEE_CS_CALLCONV_VARARG)
-            _managedCallingConventionAndArgIteratorFlags = CALLCONV_VarArgs;
+            ((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags = CALLCONV_VarArgs;
         else
-            _managedCallingConventionAndArgIteratorFlags = CALLCONV_Standard;
+            ((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags = CALLCONV_Standard;
 
         if ((mdCallingConvention & IMAGE_CEE_CS_CALLCONV_HASTHIS) != 0)
-            _managedCallingConventionAndArgIteratorFlags |= CALLCONV_HasThis;
+            ((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags |= CALLCONV_HasThis;
 
         if ((mdCallingConvention & IMAGE_CEE_CS_CALLCONV_EXPLICITTHIS) != 0)
-            _managedCallingConventionAndArgIteratorFlags |= CALLCONV_ExplicitThis;
+            ((SignatureNativeInternal*)m_pObj)->_managedCallingConventionAndArgIteratorFlags |= CALLCONV_ExplicitThis;
     }
-
-    // Mirrored in the managed world (System.Signature)
-    //
-    // this is the layout the classloader chooses by default for the managed struct.
-    //
-    PTRARRAYREF _arguments;
-    REFLECTCLASSBASEREF _declaringType;
-    OBJECTREF _returnTypeORfieldType;
-    OBJECTREF _keepAlive;
-    PCCOR_SIGNATURE _sig;
-    DWORD _csig;
-    INT32 _managedCallingConventionAndArgIteratorFlags;
-    INT32 _nSizeOfArgStack;
-    MethodDesc* _pMethod;
 };
 
 typedef DPTR(SignatureNative) PTR_SignatureNative;
@@ -496,11 +514,15 @@ typedef REF<SignatureNative> SIGNATURENATIVEREF;
 typedef PTR_SignatureNative SIGNATURENATIVEREF;
 #endif
 
-class ReflectionPointer : public Object
+class ReflectionPointerInternal : public ObjectInternal
 {
 public:
     OBJECTREF _ptrType;
     void * _ptr;
+};
+
+class ReflectionPointer : public Object
+{
 };
 
 #endif

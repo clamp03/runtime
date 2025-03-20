@@ -71,10 +71,10 @@ OBJECTREF InvokeUtil::CreatePointer(TypeHandle th, void * p)
 
     refObj = AllocateObject(CoreLibBinder::GetClass(CLASS__POINTER));
 
-    ((ReflectionPointer *)OBJECTREFToObject(refObj))->_ptr = p;
+    ((ReflectionPointerInternal*)OBJECTREFToObject(refObj)->m_pObj)->_ptr = p;
 
     OBJECTREF refType = th.GetManagedClassObject();
-    SetObjectReference(&(((ReflectionPointer *)OBJECTREFToObject(refObj))->_ptrType), refType);
+    SetObjectReference(&(((ReflectionPointerInternal *)OBJECTREFToObject(refObj)->m_pObj)->_ptrType), refType);
 
     GCPROTECT_END();
     RETURN refObj;
@@ -91,7 +91,7 @@ TypeHandle InvokeUtil::GetPointerType(OBJECTREF pObj) {
     CONTRACT_END;
 
     ReflectionPointer * pReflectionPointer = (ReflectionPointer *)OBJECTREFToObject(pObj);
-    REFLECTCLASSBASEREF o = (REFLECTCLASSBASEREF)pReflectionPointer->_ptrType;
+    REFLECTCLASSBASEREF o = (REFLECTCLASSBASEREF)((ReflectionPointerInternal*)pReflectionPointer->m_pObj)->_ptrType;
     TypeHandle typeHandle = o->GetType();
     RETURN typeHandle;
 }
@@ -107,7 +107,7 @@ void* InvokeUtil::GetPointerValue(OBJECTREF pObj) {
     CONTRACT_END;
 
     ReflectionPointer * pReflectionPointer = (ReflectionPointer *)OBJECTREFToObject(pObj);
-    void *value = pReflectionPointer->_ptr;
+    void *value = ((ReflectionPointerInternal*)pReflectionPointer->m_pObj)->_ptr;
     RETURN value;
 }
 

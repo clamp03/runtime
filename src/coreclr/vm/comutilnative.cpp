@@ -594,24 +594,24 @@ FCIMPL2(void, GCInterface::GetMemoryInfo, Object* objUNSAFE, int kind)
 
     GCMEMORYINFODATAREF objGCMemoryInfo = (GCMEMORYINFODATAREF)(ObjectToOBJECTREF (objUNSAFE));
 
-    UINT64* genInfoRaw = (UINT64*)&(objGCMemoryInfo->generationInfo0);
-    UINT64* pauseInfoRaw = (UINT64*)&(objGCMemoryInfo->pauseDuration0);
+    UINT64* genInfoRaw = (UINT64*)&(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->generationInfo0);
+    UINT64* pauseInfoRaw = (UINT64*)&(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->pauseDuration0);
 
     return GCHeapUtilities::GetGCHeap()->GetMemoryInfo(
-        &(objGCMemoryInfo->highMemLoadThresholdBytes),
-        &(objGCMemoryInfo->totalAvailableMemoryBytes),
-        &(objGCMemoryInfo->lastRecordedMemLoadBytes),
-        &(objGCMemoryInfo->lastRecordedHeapSizeBytes),
-        &(objGCMemoryInfo->lastRecordedFragmentationBytes),
-        &(objGCMemoryInfo->totalCommittedBytes),
-        &(objGCMemoryInfo->promotedBytes),
-        &(objGCMemoryInfo->pinnedObjectCount),
-        &(objGCMemoryInfo->finalizationPendingCount),
-        &(objGCMemoryInfo->index),
-        &(objGCMemoryInfo->generation),
-        &(objGCMemoryInfo->pauseTimePercent),
-        (bool*)&(objGCMemoryInfo->isCompaction),
-        (bool*)&(objGCMemoryInfo->isConcurrent),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->highMemLoadThresholdBytes),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->totalAvailableMemoryBytes),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->lastRecordedMemLoadBytes),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->lastRecordedHeapSizeBytes),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->lastRecordedFragmentationBytes),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->totalCommittedBytes),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->promotedBytes),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->pinnedObjectCount),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->finalizationPendingCount),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->index),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->generation),
+        &(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->pauseTimePercent),
+        (bool*)&(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->isCompaction),
+        (bool*)&(((GCMemoryInfoDataInternal*)objGCMemoryInfo->m_pObj)->isConcurrent),
         genInfoRaw,
         pauseInfoRaw,
         kind);

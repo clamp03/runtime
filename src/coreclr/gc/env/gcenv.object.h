@@ -156,50 +156,61 @@ public:
     }
 };
 
+class ObjectInternal
+{
+public:
+    MethodTable * m_pMethTab;
+};
 class Object
 {
-    MethodTable * m_pMethTab;
-
 public:
+    ObjectInternal* m_pObj;
+
     ObjHeader * GetHeader()
     {
-        return ((ObjHeader *)this) - 1;
+        return ((ObjHeader *)(m_pObj)) - 1;
     }
 
     MethodTable * RawGetMethodTable() const
     {
-        return m_pMethTab;
+        return m_pObj->m_pMethTab;
     }
 
     MethodTable * GetGCSafeMethodTable() const
     {
 #ifdef HOST_64BIT
-        return (MethodTable *)((uintptr_t)m_pMethTab & ~7);
+        return (MethodTable *)((uintptr_t)m_pObj->m_pMethTab & ~7);
 #else
-        return (MethodTable *)((uintptr_t)m_pMethTab & ~3);
+        return (MethodTable *)((uintptr_t)m_pObj->m_pMethTab & ~3);
 #endif //HOST_64BIT
     }
 
     void RawSetMethodTable(MethodTable * pMT)
     {
-        m_pMethTab = pMT;
+        m_pObj->m_pMethTab = pMT;
     }
 };
 #define MIN_OBJECT_SIZE     (2*sizeof(uint8_t*) + sizeof(ObjHeader))
 
+class ArrayBaseInternal : public ObjectInternal
+{
+    friend class ArrayBase;
+private:
+    uint32_t m_dwLength;
+};
+
 class ArrayBase : public Object
 {
-    uint32_t m_dwLength;
 
 public:
     uint32_t GetNumComponents()
     {
-        return m_dwLength;
+        return ((ArrayBaseInternal*)m_pObj)->m_dwLength;
     }
 
     static size_t GetOffsetOfNumComponents()
     {
-        return offsetof(ArrayBase, m_dwLength);
+        return offsetof(ArrayBaseInternal, m_dwLength);
     }
 };
 

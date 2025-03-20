@@ -4932,7 +4932,7 @@ public:
 
         RawSetMethodTable( g_gc_pFreeObjectMethodTable );
 
-        size_t* numComponentsPtr = (size_t*) &((uint8_t*) this)[ArrayBase::GetOffsetOfNumComponents()];
+        size_t* numComponentsPtr = (size_t*) &((uint8_t*)m_pObj)[ArrayBase::GetOffsetOfNumComponents()];
         *numComponentsPtr = size - free_object_base_size;
 #ifdef VERIFY_HEAP
         //This introduces a bug in the free list management.
@@ -4940,13 +4940,13 @@ public:
         assert (*numComponentsPtr >= 0);
         if (GCConfig::GetHeapVerifyLevel() & GCConfig::HEAPVERIFY_GC)
         {
-            memset (((uint8_t*)this)+sizeof(ArrayBase), 0xcc, *numComponentsPtr);
+            memset (((uint8_t*)m_pObj)+sizeof(ArrayBaseInternal), 0xcc, *numComponentsPtr);
 #ifdef DOUBLY_LINKED_FL
             // However, in this case we can't leave the Next field uncleared because no one will clear it
             // so it remains 0xcc and that's not good for verification
             if (*numComponentsPtr > 0)
             {
-                free_list_slot (this) = 0;
+                free_list_slot (m_pObj) = 0;
             }
 #endif //DOUBLY_LINKED_FL
         }
@@ -4957,7 +4957,7 @@ public:
         // and one that is. So we always set its prev to PREV_EMPTY to indicate that it's a free
         // object that's not on the free list. If it should be on the free list, it will be set to the
         // appropriate non zero value.
-        check_and_clear_in_free_list ((uint8_t*)this, size);
+        check_and_clear_in_free_list ((uint8_t*)m_pObj, size);
 #endif //DOUBLY_LINKED_FL
     }
 
@@ -4966,7 +4966,7 @@ public:
         size_t size = free_object_base_size - plug_skew;
 
         // since we only need to clear 2 ptr size, we do it manually
-        PTR_PTR m = (PTR_PTR) this;
+        PTR_PTR m = (PTR_PTR) m_pObj;
         for (size_t i = 0; i < size / sizeof(PTR_PTR); i++)
             *(m++) = 0;
     }
