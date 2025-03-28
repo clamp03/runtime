@@ -1950,14 +1950,6 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
     {
         ins = genGetVolatileLdStIns(ins, targetReg, tree, &emitBarrier);
     }
-    /*
-    if (!tree->Addr()->IsIconHandle())
-    {
-        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-        // GetEmitter()->emitInsLoadStoreOp(INS_ldr, EA_PTRSIZE, targetReg, tree); // FEATURE_NEW_GC
-    }
-    */
-
     GetEmitter()->emitInsLoadStoreOp(ins, emitActualTypeSize(type), targetReg, tree);
 
     if (emitBarrier)
@@ -3060,7 +3052,6 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* node)
     regNumber newGcReg = internalRegisters.Extract(node, RBM_ALLINT);
     if (dstAddr->TypeGet() == TYP_REF || (dstAddr->OperIsAddrMode() && dstAddr->AsAddrMode()->HasBase() && dstAddr->AsAddrMode()->Base()->TypeGet() == TYP_REF)) // FEATURE_NEW_GC
     {
-        fprintf(stderr, "[CLAMP] %s %d == NEW LOAD for STORBLK Unroll\n", __PRETTY_FUNCTION__, __LINE__);
         emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, newGcReg, dstAddrBaseReg);
         emit->emitIns(INS_nop);
     }

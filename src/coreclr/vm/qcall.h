@@ -203,7 +203,6 @@ public:
         OBJECTREF Get()
         {
             LIMITED_METHOD_CONTRACT;
-            printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, m_ppObject, *m_ppObject);
             return ObjectToOBJECTREF(*m_ppObject);
         }
 

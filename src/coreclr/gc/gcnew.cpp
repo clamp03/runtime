@@ -202,7 +202,7 @@ HRESULT GCHeap::Initialize()
     {
         void* allocated = malloc(MEM_SIZE);
         MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
-        fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p\n", MEM, MEM + MEM_SIZE);
+        //fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p\n", MEM, MEM + MEM_SIZE);
     }
     return S_OK;
 }
@@ -316,7 +316,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     ret += bias;
     *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
     MEM_CURR += size;
-    fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, MEM_CURR);
+    //fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, MEM_CURR);
     return (Object*)(ret - 8);
 }
 
