@@ -1219,6 +1219,7 @@ VOID StubLinkerCPU::EmitShuffleThunk(ShuffleEntry *pShuffleEntryArray)
         // field and stash it in r12.
         //  ldr r12, [r0, #offsetof(DelegateObject, _methodPtrAux)]
         ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(0), 0); // FEATURE_NEW_GC
+        ThumbEmitNop();
         ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(12), DelegateObject::GetOffsetOfMethodPtrAux());
         //ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(0), DelegateObject::GetOffsetOfMethodPtrAux());
 
@@ -1459,6 +1460,8 @@ VOID StubLinkerCPU::EmitComputedInstantiatingMethodStub(MethodDesc* pSharedMD, s
         // Unboxing stub case
         // Skip over the MethodTable* to find the address of the unboxed value type.
         //  add r0, #sizeof(MethodTable*)
+        ThumbEmitLoadRegIndirect(ThumbReg(0), ThumbReg(0), 0); // FEATURE_NEW_GC
+        ThumbEmitNop();
         ThumbEmitIncrement(ThumbReg(0), sizeof(MethodTable*));
     }
 

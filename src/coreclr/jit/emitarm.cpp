@@ -8154,6 +8154,7 @@ regNumber emitter::emitInsTernary(instruction ins, emitAttr attr, GenTree* dst, 
         { // FEATURE_NEW_GC
             printf("[CLAMP] %s %d ADDITIONAL LDR for ARITHMETIC\n", __PRETTY_FUNCTION__, __LINE__);
             emitIns_R_R(INS_ldr, EA_PTRSIZE, src1->GetRegNum(), src1->GetRegNum()); // FEATURE_NEW_GC
+            emitIns(INS_nop);
         }
         // src2 can be immed or reg
         assert(!src2->isContained() || src2->isContainedIntOrIImmed());

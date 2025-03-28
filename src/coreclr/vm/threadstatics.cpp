@@ -509,6 +509,7 @@ void* GetThreadLocalStaticBase(TLSIndex index)
     bool isCollectible;
     bool staticIsNonCollectible = false;
     MethodTable *pMT = LookupMethodTableAndFlagForThreadStatic(index, &isGCStatic, &isCollectible);
+    bool isDirect = false;
 
     struct
     {
@@ -536,7 +537,7 @@ void* GetThreadLocalStaticBase(TLSIndex index)
             t_ThreadStatics.cNonCollectibleTlsData = tlsArrayNew->GetNumComponents() + NUMBER_OF_TLSOFFSETS_NOT_USED_IN_NONCOLLECTIBLE_ARRAY;
             GCPROTECT_END();
         }
-        gcBaseAddresses.ppTLSBaseAddress = (TADDR*)(tlsArray->GetDataPtr() + (index.GetIndexOffset() - NUMBER_OF_TLSOFFSETS_NOT_USED_IN_NONCOLLECTIBLE_ARRAY)) ;
+        gcBaseAddresses.ppTLSBaseAddress = (TADDR*)(tlsArray->GetDataPtr() + (index.GetIndexOffset() - NUMBER_OF_TLSOFFSETS_NOT_USED_IN_NONCOLLECTIBLE_ARRAY)); // HERE
         staticIsNonCollectible = true;
         gcBaseAddresses.pTLSBaseAddress = *gcBaseAddresses.ppTLSBaseAddress;
     }
@@ -546,6 +547,7 @@ void* GetThreadLocalStaticBase(TLSIndex index)
         _ASSERTE(!isGCStatic);
         _ASSERTE(!isCollectible);
         gcBaseAddresses.pTLSBaseAddress = ((TADDR)&t_ThreadStatics) + index.GetIndexOffset();
+        isDirect = gcBaseAddresses.pTLSBaseAddress != NULL;
     }
     else
     {
@@ -691,7 +693,14 @@ void* GetThreadLocalStaticBase(TLSIndex index)
     }
     GCPROTECT_END();
     _ASSERTE(gcBaseAddresses.pTLSBaseAddress != (TADDR)NULL);
-    return reinterpret_cast<void*>(gcBaseAddresses.pTLSBaseAddress);
+    if (isDirect)
+    {
+        return reinterpret_cast<void*>(gcBaseAddresses.pTLSBaseAddress);
+    }
+    else
+    {
+        return reinterpret_cast<void*>(((Object*)gcBaseAddresses.pTLSBaseAddress)->m_pObj);
+    }
 }
 
 void GetTLSIndexForThreadStatic(MethodTable* pMT, bool gcStatic, TLSIndex* pIndex, uint32_t bytesNeeded)

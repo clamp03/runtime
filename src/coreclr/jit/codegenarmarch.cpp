@@ -1716,6 +1716,7 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
     if (base->TypeGet() == TYP_REF) // FEATURE_NEW_GC. AFTER THIS FRAGILE ADDRESS IS SAVED TO node->GetRegNum()
     {
         GetEmitter()->emitIns_R_R(INS_ldr, EA_PTRSIZE, tmpBaseReg, base->GetRegNum());
+        GetEmitter()->emitIns(INS_nop);
         assert(tmpBaseReg != indexReg);
     }
     else
@@ -3056,6 +3057,18 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* node)
 #ifdef TARGET_ARM
     const regNumber tempReg = internalRegisters.Extract(node, RBM_ALLINT);
 
+    regNumber newGcReg = internalRegisters.Extract(node, RBM_ALLINT);
+    if (dstAddr->TypeGet() == TYP_REF || (dstAddr->OperIsAddrMode() && dstAddr->AsAddrMode()->HasBase() && dstAddr->AsAddrMode()->Base()->TypeGet() == TYP_REF)) // FEATURE_NEW_GC
+    {
+        fprintf(stderr, "[CLAMP] %s %d == NEW LOAD for STORBLK Unroll\n", __PRETTY_FUNCTION__, __LINE__);
+        emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, newGcReg, dstAddrBaseReg);
+        emit->emitIns(INS_nop);
+    }
+    else
+    {
+        newGcReg = dstAddrBaseReg;
+    }
+
     for (unsigned regSize = REGSIZE_BYTES; size > 0; size -= regSize, srcOffset += regSize, dstOffset += regSize)
     {
         while (regSize > size)
@@ -3103,7 +3116,7 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* node)
         }
         else
         {
-            emit->emitIns_R_R_I(storeIns, attr, tempReg, dstAddrBaseReg, dstOffset);
+            emit->emitIns_R_R_I(storeIns, attr, tempReg, newGcReg, dstOffset);
         }
     }
 #endif // TARGET_ARM
@@ -4422,6 +4435,7 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
     if (lea->HasBase() && lea->Base()->TypeGet() == TYP_REF) // FEATURE_NEW_GC
     {
         emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, lea->Base()->GetRegNum(), lea->Base()->GetRegNum()); // FEATURE_NEW_GC
+        emit->emitIns(INS_nop);
     }
 
     if (lea->HasBase() && lea->HasIndex())

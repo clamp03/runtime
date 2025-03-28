@@ -73,6 +73,11 @@ FCIMPL1(IMDInternalImport*, MetaDataImport::GetMetadataImport, ReflectModuleBase
 
     REFLECTMODULEBASEREF refModule = (REFLECTMODULEBASEREF)ObjectToOBJECTREF(pModuleUNSAFE);
     Module *pModule = refModule->GetModule();
+    if (pModule == NULL || pModule->GetMDImport() == NULL)
+    {
+        printf("[CLAMP] OH NO~\n");
+    }
+    printf("[CLAMP] %s %d %p %p === NEED TO CHECK IT is ZERO\n", __PRETTY_FUNCTION__, __LINE__, pModule, pModule->GetMDImport());
     return pModule->GetMDImport();
 }
 FCIMPLEND

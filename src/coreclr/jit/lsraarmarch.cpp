@@ -614,6 +614,7 @@ int LinearScan::BuildBlockStore(GenTreeBlk* blkNode)
             case GenTreeBlk::BlkOpKindUnroll:
             {
                 buildInternalIntRegisterDefForNode(blkNode);
+                buildInternalIntRegisterDefForNode(blkNode);
 #ifdef TARGET_ARM64
                 const bool canUseLoadStorePairIntRegsInstrs = (size >= 2 * REGSIZE_BYTES);
 
