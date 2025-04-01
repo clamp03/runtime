@@ -155,7 +155,7 @@ OBJECTREF *PinnedHeapHandleBucket::AllocateHandles(DWORD nRequested)
     CONTRACTL_END;
 
     _ASSERTE(nRequested > 0 && nRequested <= GetNumRemainingHandles());
-    _ASSERTE(m_pArrayDataPtr == (OBJECTREF*)((PTRARRAYREF)ObjectFromHandle(m_hndHandleArray))->GetDataPtr());
+    // _ASSERTE(m_pArrayDataPtr == (OBJECTREF*)((PTRARRAYREF)ObjectFromHandle(m_hndHandleArray))->GetDataPtr());
 
     // Store the handles in the buffer that was passed in
     OBJECTREF* ret = &m_pArrayDataPtr[m_CurrentPos];

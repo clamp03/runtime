@@ -23,6 +23,11 @@ uint8_t* MEM = NULL;
 size_t   MEM_SIZE = 1024 * 1024 * 10;
 size_t   MEM_CURR = 0;
 
+uintptr_t** IND_POINTER = NULL;
+size_t      IND_COUNTER = 0;
+
+bool GC_COLLECTED = false;
+
 // gcee.cpp
 void GCHeap::UpdatePreGCCounters()
 {
@@ -202,6 +207,7 @@ HRESULT GCHeap::Initialize()
     {
         void* allocated = malloc(MEM_SIZE);
         MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
+        IND_POINTER = (uintptr_t**)malloc(sizeof(uintptr_t*) * 1024);
         //fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p\n", MEM, MEM + MEM_SIZE);
     }
     return S_OK;
@@ -317,6 +323,13 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
     MEM_CURR += size;
     //fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, MEM_CURR);
+    IND_POINTER[IND_COUNTER++] = (uintptr_t*)(ret - 8);
+
+    // Check indirection is working well after objects are moved.
+    if (IND_COUNTER % 100 == 0)
+    {
+        GarbageCollect(0, 0, 0);
+    }
     return (Object*)(ret - 8);
 }
 
@@ -333,7 +346,24 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
 
 HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
 {
-    assert(!"Not Implemented Yet");
+    if (GC_COLLECTED)
+    {
+        return S_OK;
+    }
+    GC_COLLECTED = true;
+
+    void* allocated = malloc(MEM_SIZE);
+    memcpy(allocated, MEM, MEM_CURR);
+    size_t diff = (uintptr_t)allocated - (uintptr_t)MEM;
+    for (int i = 0; i < IND_COUNTER; i++)
+    {
+        uintptr_t* addr = IND_POINTER[i]; // To check, invalidates object in previous mem.
+        ((uintptr_t*)*addr)[0] = 0;
+        ((uintptr_t*)*addr)[1] = 0;
+        *addr = *addr + diff;
+    }
+    MEM = (uint8_t*)allocated;
+
     return S_OK;
 }
 
