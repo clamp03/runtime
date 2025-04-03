@@ -10,6 +10,7 @@
 
 #include "gc.h"
 #include "gcscan.h"
+#include "gcdesc.h"
 #include "gceventstatus.h"
 
 namespace NGC {
@@ -36,6 +37,8 @@ bool IsInProgress = false;
 bool IsSuspensionPending = false;
 
 bool GC_COLLECTED = false;
+
+#define SPECIAL_HEADER_BITS (0x3)
 
 // gcee.cpp
 void GCHeap::UpdatePreGCCounters()
@@ -289,17 +292,360 @@ void GCHeap::Promote(Object** ppObject, ScanContext* sc, uint32_t flags)
     assert(!"Not Implemented Yet");
 }
 
+#define GC_MARKED       (size_t)0x1
+class CObjectHeader : public Object
+{
+public:
+#if defined(FEATURE_NATIVEAOT) || defined(BUILD_AS_STANDALONE)
+    uint32_t GetNumComponents()
+    {
+        return ((ArrayBase *)this)->GetNumComponents();
+    }
+#endif //FEATURE_NATIVEAOT || BUILD_AS_STANDALONE
+
+    /////
+    //
+    // Header Status Information
+    //
+
+    MethodTable    *GetMethodTable() const
+    {
+        return( (MethodTable *) (((size_t) RawGetMethodTable()) & (~SPECIAL_HEADER_BITS)));
+    }
+
+    void SetMarked()
+    {
+        _ASSERTE(RawGetMethodTable());
+        RawSetMethodTable((MethodTable *) (((size_t) RawGetMethodTable()) | GC_MARKED));
+    }
+
+    BOOL IsMarked() const
+    {
+        return !!(((size_t)RawGetMethodTable()) & GC_MARKED);
+    }
+
+    void SetPinned()
+    {
+        assert (!(gc_heap::settings.concurrent));
+        GetHeader()->SetGCBit();
+    }
+
+    BOOL IsPinned() const
+    {
+        return !!((((CObjectHeader*)this)->GetHeader()->GetBits()) & BIT_SBLK_GC_RESERVE);
+    }
+
+    // Now we set more bits should actually only clear the mark bit
+    void ClearMarked()
+    {
+#ifdef DOUBLY_LINKED_FL
+        RawSetMethodTable ((MethodTable *)(((size_t) RawGetMethodTable()) & (~GC_MARKED)));
+#else
+        RawSetMethodTable (GetMethodTable());
+#endif //DOUBLY_LINKED_FL
+    }
+
+#if 0
+#ifdef DOUBLY_LINKED_FL
+    void SetBGCMarkBit()
+    {
+        RawSetMethodTable((MethodTable *) (((size_t) RawGetMethodTable()) | BGC_MARKED_BY_FGC));
+    }
+    BOOL IsBGCMarkBitSet() const
+    {
+        return !!(((size_t)RawGetMethodTable()) & BGC_MARKED_BY_FGC);
+    }
+    void ClearBGCMarkBit()
+    {
+        RawSetMethodTable((MethodTable *)(((size_t) RawGetMethodTable()) & (~BGC_MARKED_BY_FGC)));
+    }
+
+    void SetFreeObjInCompactBit()
+    {
+        RawSetMethodTable((MethodTable *) (((size_t) RawGetMethodTable()) | MAKE_FREE_OBJ_IN_COMPACT));
+    }
+    BOOL IsFreeObjInCompactBitSet() const
+    {
+        return !!(((size_t)RawGetMethodTable()) & MAKE_FREE_OBJ_IN_COMPACT);
+    }
+    void ClearFreeObjInCompactBit()
+    {
+#ifdef _DEBUG
+        // check this looks like an object, but do NOT validate pointers to other objects
+        // as these may not be valid yet - we are calling this during compact_phase
+        Validate(FALSE);
+#endif //_DEBUG
+        RawSetMethodTable((MethodTable *)(((size_t) RawGetMethodTable()) & (~MAKE_FREE_OBJ_IN_COMPACT)));
+    }
+#endif //DOUBLY_LINKED_FL
+
+    size_t ClearSpecialBits()
+    {
+        size_t special_bits = ((size_t)RawGetMethodTable()) & SPECIAL_HEADER_BITS;
+        if (special_bits != 0)
+        {
+            assert ((special_bits & (~ALLOWED_SPECIAL_HEADER_BITS)) == 0);
+            RawSetMethodTable ((MethodTable*)(((size_t)RawGetMethodTable()) & ~(SPECIAL_HEADER_BITS)));
+        }
+        return special_bits;
+    }
+
+    void SetSpecialBits (size_t special_bits)
+    {
+        assert ((special_bits & (~ALLOWED_SPECIAL_HEADER_BITS)) == 0);
+        if (special_bits != 0)
+        {
+            RawSetMethodTable ((MethodTable*)(((size_t)RawGetMethodTable()) | special_bits));
+        }
+    }
+
+    CGCDesc *GetSlotMap ()
+    {
+        assert (GetMethodTable()->ContainsGCPointers());
+        return CGCDesc::GetCGCDescFromMT(GetMethodTable());
+    }
+
+    void SetFree(size_t size)
+    {
+        assert (size >= free_object_base_size);
+
+        assert (g_gc_pFreeObjectMethodTable->GetBaseSize() == free_object_base_size);
+        assert (g_gc_pFreeObjectMethodTable->RawGetComponentSize() == 1);
+
+        RawSetMethodTable( g_gc_pFreeObjectMethodTable );
+
+        size_t* numComponentsPtr = (size_t*) &((uint8_t*)m_pObj)[ArrayBase::GetOffsetOfNumComponents()];
+        *numComponentsPtr = size - free_object_base_size;
+#ifdef VERIFY_HEAP
+        //This introduces a bug in the free list management.
+        //((void**) this)[-1] = 0;    // clear the sync block,
+        assert (*numComponentsPtr >= 0);
+        if (GCConfig::GetHeapVerifyLevel() & GCConfig::HEAPVERIFY_GC)
+        {
+            memset (((uint8_t*)m_pObj)+sizeof(ArrayBaseInternal), 0xcc, *numComponentsPtr);
+#ifdef DOUBLY_LINKED_FL
+            // However, in this case we can't leave the Next field uncleared because no one will clear it
+            // so it remains 0xcc and that's not good for verification
+            if (*numComponentsPtr > 0)
+            {
+                free_list_slot (m_pObj) = 0;
+            }
+#endif //DOUBLY_LINKED_FL
+        }
+#endif //VERIFY_HEAP
+
+#ifdef DOUBLY_LINKED_FL
+        // For background GC, we need to distinguish between a free object that's not on the free list
+        // and one that is. So we always set its prev to PREV_EMPTY to indicate that it's a free
+        // object that's not on the free list. If it should be on the free list, it will be set to the
+        // appropriate non zero value.
+        check_and_clear_in_free_list ((uint8_t*)m_pObj, size);
+#endif //DOUBLY_LINKED_FL
+    }
+
+    void UnsetFree()
+    {
+        size_t size = free_object_base_size - plug_skew;
+
+        // since we only need to clear 2 ptr size, we do it manually
+        PTR_PTR m = (PTR_PTR) m_pObj;
+        for (size_t i = 0; i < size / sizeof(PTR_PTR); i++)
+            *(m++) = 0;
+    }
+
+    BOOL IsFree () const
+    {
+        return (GetMethodTable() == g_gc_pFreeObjectMethodTable);
+    }
+#endif // 0
+
+#ifdef FEATURE_STRUCTALIGN
+    int GetRequiredAlignment () const
+    {
+        return GetMethodTable()->GetRequiredAlignment();
+    }
+#endif // FEATURE_STRUCTALIGN
+
+    BOOL ContainsGCPointers() const
+    {
+        return GetMethodTable()->ContainsGCPointers();
+    }
+
+#ifdef COLLECTIBLE_CLASS
+    BOOL Collectible() const
+    {
+        return GetMethodTable()->Collectible();
+    }
+
+    FORCEINLINE BOOL ContainsGCPointersOrCollectible() const
+    {
+        MethodTable *pMethodTable = GetMethodTable();
+        return (pMethodTable->ContainsGCPointers() || pMethodTable->Collectible());
+    }
+#endif //COLLECTIBLE_CLASS
+
+    Object* GetObjectBase() const
+    {
+        return (Object*) this;
+    }
+};
+
+#define marked(i) header(i)->IsMarked()
+#define set_marked(i) header(i)->SetMarked()
+#define clear_marked(i) header(i)->ClearMarked()
+#define pinned(i) header(i)->IsPinned()
+#define set_pinned(i) header(i)->SetPinned()
+#define clear_pinned(i) header(i)->GetHeader()->ClrGCBit();
+
+#define ignore_start 0
+#define header(i) ((CObjectHeader*)(i))
+#define method_table(o) ((CObjectHeader*)(o))->GetMethodTable()
+#define get_class_object(i) GCToEEInterface::GetLoaderAllocatorObjectForGC((Object *)i)
+inline size_t my_get_size (Object* ob)
+{
+    MethodTable* mT = header(ob)->GetMethodTable();
+
+    return (mT->GetBaseSize() +
+            (mT->HasComponentSize() ?
+             ((size_t)((CObjectHeader*)ob)->GetNumComponents() * mT->RawGetComponentSize()) : 0));
+}
+#define size(i) my_get_size (header(i))
+
+#ifdef COLLECTIBLE_CLASS
+#define contain_pointers_or_collectible(i) header(i)->ContainsGCPointersOrCollectible()
+#define get_class_object(i) GCToEEInterface::GetLoaderAllocatorObjectForGC((Object *)i)
+#define is_collectible(i) method_table(i)->Collectible()
+#else //COLLECTIBLE_CLASS
+#define contain_pointers_or_collectible(i) header(i)->ContainsGCPointers()
+#endif //COLLECTIBLE_CLASS
+
+
+#define go_through_object(mt,o,size,parm,start,start_useful,limit,exp)      \
+{                                                                           \
+    CGCDesc* map = CGCDesc::GetCGCDescFromMT((MethodTable*)(mt));           \
+    CGCDescSeries* cur = map->GetHighestSeries();                           \
+    ptrdiff_t cnt = (ptrdiff_t) map->GetNumSeries();                        \
+                                                                            \
+    if (cnt >= 0)                                                           \
+    {                                                                       \
+        CGCDescSeries* last = map->GetLowestSeries();                       \
+        uint8_t** parm = 0;                                                 \
+        do                                                                  \
+        {                                                                   \
+            assert (parm <= (uint8_t**)((*(uint8_t**)o) + cur->GetSeriesOffset()));     \
+            parm = (uint8_t**)((*(uint8_t**)o) + cur->GetSeriesOffset());               \
+            uint8_t** ppstop =                                              \
+                (uint8_t**)((uint8_t*)parm + cur->GetSeriesSize() + (size));\
+            if (!start_useful || (uint8_t*)ppstop > (start))                \
+            {                                                               \
+                if (start_useful && (uint8_t*)parm < (start)) parm = (uint8_t**)(start);\
+                while (parm < ppstop)                                       \
+                {                                                           \
+                   {exp}                                                    \
+                   parm++;                                                  \
+                }                                                           \
+            }                                                               \
+            cur--;                                                          \
+                                                                            \
+        } while (cur >= last);                                              \
+    }                                                                       \
+    else                                                                    \
+    {                                                                       \
+        /* Handle the repeating case - array of valuetypes */               \
+        uint8_t** parm = (uint8_t**)((*(uint8_t**)o) + cur->startoffset);               \
+        if (start_useful && start > (uint8_t*)parm)                         \
+        {                                                                   \
+            ptrdiff_t cs = mt->RawGetComponentSize();                         \
+            parm = (uint8_t**)((uint8_t*)parm + (((start) - (uint8_t*)parm)/cs)*cs); \
+        }                                                                   \
+        while ((uint8_t*)parm < ((*(uint8_t**)o)+(size)-plug_skew))                     \
+        {                                                                   \
+            for (ptrdiff_t __i = 0; __i > cnt; __i--)                         \
+            {                                                               \
+                HALF_SIZE_T skip =  (cur->val_serie + __i)->skip;           \
+                HALF_SIZE_T nptrs = (cur->val_serie + __i)->nptrs;          \
+                uint8_t** ppstop = parm + nptrs;                            \
+                if (!start_useful || (uint8_t*)ppstop > (start))            \
+                {                                                           \
+                    if (start_useful && (uint8_t*)parm < (start)) parm = (uint8_t**)(start);      \
+                    do                                                      \
+                    {                                                       \
+                       {exp}                                                \
+                       parm++;                                              \
+                    } while (parm < ppstop);                                \
+                }                                                           \
+                parm = (uint8_t**)((uint8_t*)ppstop + skip);                \
+            }                                                               \
+        }                                                                   \
+    }                                                                       \
+}
+
+#define go_through_object_nostart(mt,o,size,parm,exp) {go_through_object(mt,o,size,parm,o,ignore_start,(o + size),exp); }
+
+
+#ifndef COLLECTIBLE_CLASS
+#define go_through_object_cl(mt,o,size,parm,exp)                            \
+{                                                                           \
+    assert(!"Not Implemented Yet");                                         \
+}
+#else // COLLECTIBLE_CLASS
+#define go_through_object_cl(mt,o,size,parm,exp)                            \
+{                                                                           \
+    if (header(o)->Collectible())                                           \
+    {                                                                       \
+        uint8_t* class_obj = get_class_object (o);                             \
+        uint8_t** parm = &class_obj;                                           \
+        do {exp} while (false);                                             \
+    }                                                                       \
+    if (header(o)->ContainsGCPointers())                                      \
+    {                                                                       \
+        go_through_object_nostart(mt,o,size,parm,exp);                      \
+    }                                                                       \
+}
+#endif //COLLECTIBLE_CLASS
+
+void mark_object_simple(uint8_t** po)
+{
+    uint8_t* o = *po;
+    size_t s = size(o);
+    go_through_object_cl(method_table(o), o, s, poo, {
+                uint8_t* oo = *poo;
+                if (oo != nullptr && !marked(oo))
+                {
+                    set_marked(oo);
+                    if ((uintptr_t)oo >= (uintptr_t)MEM && (uintptr_t)oo < (uintptr_t)(MEM + MEM_CURR))
+                    {
+                        printf("[CLAMP] mark_object_simple %p %p\n", oo, oo + MEM_DIFF);
+                        *(uint8_t**)poo = (oo + MEM_DIFF);
+                    }
+                    if (oo && contain_pointers_or_collectible(oo))
+                    {
+                        mark_object_simple(poo);
+                    }
+                    clear_marked(oo);
+                }
+            }
+    );
+}
+
 void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
         uint32_t flags)
 {
-    uintptr_t object = (uintptr_t)(Object*)(*ppObject);
-    printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, ppObject, *ppObject);
-    if (object < (uintptr_t)MEM || object >= (uintptr_t)(MEM + MEM_CURR))
+    uint8_t* o = (uint8_t*)*ppObject;
+    if (o == NULL)
     {
         return;
     }
-    *ppObject = (Object*)((uint8_t*)object + MEM_DIFF);
-    printf("[CLAMP] Updated %s %d TO %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, MEM_DIFF);
+    if ((uintptr_t)o >= (uintptr_t)MEM && (uintptr_t)o < (uintptr_t)(MEM + MEM_CURR))
+    {
+        printf("[CLAMP] Updated %s %d %p TO %p\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, o + MEM_DIFF);
+        *ppObject = (Object*)(o + MEM_DIFF);
+    }
+
+    if (contain_pointers_or_collectible(o))
+    {
+        mark_object_simple((uint8_t**)ppObject);
+    }
 }
 
 /*static*/ bool GCHeap::IsLargeObject(Object *pObj)
@@ -403,20 +749,22 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
     void* allocated = malloc(MEM_SIZE);
     uint8_t* newMem = (uint8_t*)memcpy(allocated, MEM, MEM_CURR);
     MEM_DIFF = (ssize_t)newMem - (ssize_t)MEM;
+    printf("[CLAMP] %s %d MEM: %p => %p\n", __PRETTY_FUNCTION__, __LINE__, MEM, newMem);
     for (int i = 0; i < IND_COUNTER; i++)
     {
         size_t diff = IND_DIFF[i];
-        uint8_t* oldAddr = MEM + diff;
-        uint8_t* newAddr = newMem + diff;
+        uint8_t** oldAddr = (uint8_t**)(MEM + diff);
+        uint8_t** newAddr = (uint8_t**)(newMem + diff);
 
         // Invalidate contents of old object
-        uintptr_t* oldObj = *(uintptr_t**)oldAddr;
-        oldObj[0] = 0;
-        oldObj[1] = 0;
+        uint8_t* oldObj = *oldAddr;
+        ((uintptr_t*)oldObj)[0] = 0;
+        ((uintptr_t*)oldObj)[1] = 0;
 
         // Copy indirection data
-        *(uintptr_t*)newAddr = (uintptr_t)oldObj + MEM_DIFF;
-        *(uintptr_t*)oldAddr = *(uintptr_t*)newAddr;
+        *newAddr = oldObj + MEM_DIFF;
+        *oldAddr = *newAddr;
+        printf("[CLAMP] %s %d OBJ: %p %p %p => %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, oldObj, *oldAddr, newAddr, *newAddr);
     }
     printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_COUNTER);
     ScanContext sc;
@@ -425,12 +773,12 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
     sc.promotion = TRUE;
     sc.concurrent = FALSE;
     sc.stack_limit = 0;
-    printf("[CLAMP] %s %d %p => %p\n", __PRETTY_FUNCTION__, __LINE__, MEM, newMem);
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
     GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
+    GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
 
-    //MEM = (uint8_t*)memset(MEM, 0, MEM_SIZE);
-    //free(MEM);
+    MEM = (uint8_t*)memset(MEM, 0, MEM_SIZE);
+    free(MEM);
     MEM = newMem;
     GCToEEInterface::RestartEE(TRUE);
     printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
