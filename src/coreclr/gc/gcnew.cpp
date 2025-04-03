@@ -9,6 +9,7 @@
 #include "gcenv.h"
 
 #include "gc.h"
+#include "gcscan.h"
 #include "gceventstatus.h"
 
 namespace NGC {
@@ -23,8 +24,16 @@ uint8_t* MEM = NULL;
 size_t   MEM_SIZE = 1024 * 1024 * 10;
 size_t   MEM_CURR = 0;
 
-uintptr_t** IND_POINTER = NULL;
-size_t      IND_COUNTER = 0;
+uint8_t* PINNED_MEM = NULL;
+size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
+size_t   PINNED_MEM_CURR = 0;
+
+size_t* IND_DIFF = NULL;
+size_t  IND_COUNTER = 0;
+ssize_t MEM_DIFF = 0;
+
+bool IsInProgress = false;
+bool IsSuspensionPending = false;
 
 bool GC_COLLECTED = false;
 
@@ -82,8 +91,7 @@ size_t GCHeap::GetNow()
 
 bool GCHeap::IsGCInProgressHelper(bool bConsiderGCStart)
 {
-    assert(!"Not Implemented Yet");
-    return false;
+    return IsInProgress;
 }
 
 uint32_t GCHeap::WaitUntilGCComplete(bool bConsiderGCStart)
@@ -94,17 +102,18 @@ uint32_t GCHeap::WaitUntilGCComplete(bool bConsiderGCStart)
 
 void GCHeap::SetGCInProgress(bool fInProgress)
 {
-    assert(!"Not Implemented Yet");
+    IsInProgress = fInProgress;
+    // assert(!"Not Implemented Yet");
 }
 
 void GCHeap::SetWaitForGCEvent()
 {
-    assert(!"Not Implemented Yet");
+    //assert(!"Not Implemented Yet");
 }
 
 void GCHeap::ResetWaitForGCEvent()
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
 }
 
 void GCHeap::WaitUntilConcurrentGCComplete()
@@ -158,7 +167,7 @@ bool GCHeap::RuntimeStructuresValid()
 
 void GCHeap::SetSuspensionPending(bool fSuspensionPending)
 {
-    assert(!"Not Implemented Yet");
+    IsSuspensionPending = fSuspensionPending;
 }
 
 void GCHeap::ControlEvents(GCEventKeyword keyword, GCEventLevel level)
@@ -206,9 +215,12 @@ HRESULT GCHeap::Initialize()
     if (MEM == NULL)
     {
         void* allocated = malloc(MEM_SIZE);
+        void* pinned_allocated = malloc(PINNED_MEM_SIZE);
         MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
-        IND_POINTER = (uintptr_t**)malloc(sizeof(uintptr_t*) * 1024);
-        //fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p\n", MEM, MEM + MEM_SIZE);
+        PINNED_MEM = (uint8_t*)memset(pinned_allocated, 0, PINNED_MEM_SIZE);
+        IND_DIFF = (size_t*)malloc(sizeof(size_t) * 1024);
+        fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p %p %p\n",
+                MEM, MEM + MEM_SIZE, PINNED_MEM, PINNED_MEM + PINNED_MEM_SIZE);
     }
     return S_OK;
 }
@@ -280,7 +292,14 @@ void GCHeap::Promote(Object** ppObject, ScanContext* sc, uint32_t flags)
 void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
         uint32_t flags)
 {
-    assert(!"Not Implemented Yet");
+    uintptr_t object = (uintptr_t)(Object*)(*ppObject);
+    printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, ppObject, *ppObject);
+    if (object < (uintptr_t)MEM || object >= (uintptr_t)(MEM + MEM_CURR))
+    {
+        return;
+    }
+    *ppObject = (Object*)((uint8_t*)object + MEM_DIFF);
+    printf("[CLAMP] Updated %s %d TO %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, MEM_DIFF);
 }
 
 /*static*/ bool GCHeap::IsLargeObject(Object *pObj)
@@ -296,6 +315,10 @@ bool GCHeap::StressHeap(gc_alloc_context * context)
 
 Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
+    printf("[CLAMP] %s %d ALLOC\n", __PRETTY_FUNCTION__, __LINE__);
+    // Check indirection is working well after objects are moved.
+    GarbageCollect(0, 0, 0);
+
     // assert(!"Not Implemented Yet");
     if (flags & GC_ALLOC_ALIGN8)
     {
@@ -305,32 +328,57 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     {
         size = Align(size) + Align(sizeof(ObjHeader) + 4);
     }
-    assert(MEM_CURR + size < MEM_SIZE);
-    // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
-    uint8_t* ret = ((uint8_t*)MEM + MEM_CURR + Align(sizeof(ObjHeader) + 4)); // ObjHeader + m_pObj pointer
-                                                               uint8_t bias = 0;
-    if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)
+    if (flags & GC_ALLOC_PINNED_OBJECT_HEAP)
     {
-        bias += 4;
-    }
+        assert(PINNED_MEM_CURR + size < PINNED_MEM_SIZE);
+        // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
-    if (flags & GC_ALLOC_ALIGN8_BIAS)
-    {
-        bias = 4 - bias;
-    }
-    ret += bias;
-    *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
-    MEM_CURR += size;
-    //fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, MEM_CURR);
-    IND_POINTER[IND_COUNTER++] = (uintptr_t*)(ret - 8);
+        size_t diff = PINNED_MEM_CURR + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
+        uint8_t* ret = ((uint8_t*)PINNED_MEM + diff);
+        uint8_t bias = 0;
+        if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)
+        {
+            bias += 4;
+        }
 
-    // Check indirection is working well after objects are moved.
-    if (IND_COUNTER % 100 == 0)
-    {
-        GarbageCollect(0, 0, 0);
+        if (flags & GC_ALLOC_ALIGN8_BIAS)
+        {
+            bias = 4 - bias;
+        }
+        ret += bias;
+        *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
+        PINNED_MEM_CURR += size;
+        printf("[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, PINNED_MEM_CURR);
+
+        return (Object*)(ret - 8);
     }
-    return (Object*)(ret - 8);
+    else
+    {
+        assert(MEM_CURR + size < MEM_SIZE);
+        // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
+
+        size_t diff = MEM_CURR + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
+        uint8_t* ret = ((uint8_t*)MEM + diff);
+        uint8_t bias = 0;
+        if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)
+        {
+            bias += 4;
+        }
+
+        if (flags & GC_ALLOC_ALIGN8_BIAS)
+        {
+            bias = 4 - bias;
+        }
+        ret += bias;
+        diff += bias;
+        *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
+        IND_DIFF[IND_COUNTER++] = diff - 8;
+        MEM_CURR += size;
+        printf("[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, MEM_CURR);
+
+        return (Object*)(ret - 8);
+    }
 }
 
 void GCHeap::FixAllocContext(gc_alloc_context* context, void* arg, void *heap)
@@ -346,23 +394,46 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
 
 HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
 {
-    if (GC_COLLECTED)
+    if (GC_COLLECTED || IND_COUNTER == 0 || IND_COUNTER % 100 != 0)
     {
         return S_OK;
     }
     GC_COLLECTED = true;
 
     void* allocated = malloc(MEM_SIZE);
-    memcpy(allocated, MEM, MEM_CURR);
-    size_t diff = (uintptr_t)allocated - (uintptr_t)MEM;
+    uint8_t* newMem = (uint8_t*)memcpy(allocated, MEM, MEM_CURR);
+    MEM_DIFF = (ssize_t)newMem - (ssize_t)MEM;
     for (int i = 0; i < IND_COUNTER; i++)
     {
-        uintptr_t* addr = IND_POINTER[i]; // To check, invalidates object in previous mem.
-        ((uintptr_t*)*addr)[0] = 0;
-        ((uintptr_t*)*addr)[1] = 0;
-        *addr = *addr + diff;
+        size_t diff = IND_DIFF[i];
+        uint8_t* oldAddr = MEM + diff;
+        uint8_t* newAddr = newMem + diff;
+
+        // Invalidate contents of old object
+        uintptr_t* oldObj = *(uintptr_t**)oldAddr;
+        oldObj[0] = 0;
+        oldObj[1] = 0;
+
+        // Copy indirection data
+        *(uintptr_t*)newAddr = (uintptr_t)oldObj + MEM_DIFF;
+        *(uintptr_t*)oldAddr = *(uintptr_t*)newAddr;
     }
-    MEM = (uint8_t*)allocated;
+    printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_COUNTER);
+    ScanContext sc;
+    sc.thread_number = 0;
+    sc.thread_count = 1;
+    sc.promotion = TRUE;
+    sc.concurrent = FALSE;
+    sc.stack_limit = 0;
+    printf("[CLAMP] %s %d %p => %p\n", __PRETTY_FUNCTION__, __LINE__, MEM, newMem);
+    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
+
+    //MEM = (uint8_t*)memset(MEM, 0, MEM_SIZE);
+    //free(MEM);
+    MEM = newMem;
+    GCToEEInterface::RestartEE(TRUE);
+    printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
 
     return S_OK;
 }
@@ -411,8 +482,9 @@ size_t GCHeap::ApproxTotalBytesInUse(BOOL small_heap_only)
 
 bool GCHeap::IsThreadUsingAllocationContextHeap(gc_alloc_context* context, int thread_number)
 {
-    assert(!"Not Implemented Yet");
-    return false;
+    UNREFERENCED_PARAMETER(context);
+    UNREFERENCED_PARAMETER(thread_number);
+    return true;
 }
 
 int GCHeap::GetNumberOfHeaps()
