@@ -770,7 +770,7 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
     ScanContext sc;
     sc.thread_number = 0;
     sc.thread_count = 1;
-    sc.promotion = TRUE;
+    sc.promotion = FALSE;
     sc.concurrent = FALSE;
     sc.stack_limit = 0;
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
@@ -848,7 +848,7 @@ int GCHeap::GetHomeHeapNumber()
 
 unsigned int GCHeap::GetCondemnedGeneration()
 {
-    assert(!"Not Implemented Yet");
+    //assert(!"Not Implemented Yet");
     return 0;
 }
 void GCHeap::GetMemoryInfo(uint64_t* highMemLoadThresholdBytes,
