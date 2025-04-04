@@ -639,13 +639,18 @@ void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
     {
         return;
     }
+
+    printf("[CLAMP] Updated %s %d Check %p to %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, o + MEM_DIFF, flags);
     if ((uintptr_t)o >= (uintptr_t)OLD_MEM && (uintptr_t)o < (uintptr_t)(OLD_MEM + OLD_MEM_CURR))
     {
-        printf("[CLAMP] Updated %s %d %p TO %p\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, o + MEM_DIFF);
         *ppObject = (Object*)(o + MEM_DIFF);
     }
 
-    if (contain_pointers_or_collectible(o))
+    if (flags & GC_CALL_INTERIOR)
+    {
+        // TODO Something later
+    }
+    else if (contain_pointers_or_collectible(o))
     {
         mark_object_simple((uint8_t**)ppObject);
     }
@@ -743,7 +748,7 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
 
 HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
 {
-    if (IND_COUNTER == 0 || IND_COUNTER % 50 != 0)
+    if (IND_COUNTER == 0 || IND_COUNTER % 100 != 0)
     {
         return S_OK;
     }
