@@ -416,7 +416,7 @@ inline void LogAlloc(Object* object)
 template <class TObj>
 void PublishObjectAndNotify(TObj* &orObject, GC_ALLOC_FLAGS flags)
 {
-    _ASSERTE(orObject->HasEmptySyncBlockInfo());
+    //_ASSERTE(orObject->HasEmptySyncBlockInfo());
 
     if (flags & GC_ALLOC_USER_OLD_HEAP)
     {

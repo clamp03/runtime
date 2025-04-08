@@ -31,7 +31,7 @@ uint8_t* PINNED_MEM = NULL;
 size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
 size_t   PINNED_MEM_CURR = 0;
 
-size_t  IND_SIZE = 1024;
+size_t  IND_SIZE = 8 * 1024;
 unsigned long long* IND_DIFF = NULL;
 size_t  IND_CURR = 0;
 unsigned long long* OLD_IND_DIFF = NULL;
@@ -44,7 +44,7 @@ bool IsSuspensionPending = false;
 
 bool GC_MARK_PHASE = false;
 bool GC_COPY_PHASE = false;
-bool GC_RELOCATE_PHASE = false;
+bool GC_RELOCATE_PHASE = true;
 
 #define SPECIAL_HEADER_BITS (0x3)
 
@@ -229,7 +229,8 @@ HRESULT GCHeap::Initialize()
         void* pinned_allocated = malloc(PINNED_MEM_SIZE);
         MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
         PINNED_MEM = (uint8_t*)memset(pinned_allocated, 0, PINNED_MEM_SIZE);
-        IND_DIFF = (unsigned long long*)malloc(sizeof(unsigned long long) * IND_SIZE);
+        allocated = malloc(IND_SIZE);
+        IND_DIFF = (unsigned long long*)memset(allocated, 0, IND_SIZE);
         fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p %p %p\n",
                 MEM, MEM + MEM_SIZE, PINNED_MEM, PINNED_MEM + PINNED_MEM_SIZE);
     }
@@ -837,6 +838,55 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
     {
         GC_COPY_PHASE = true;
 
+        OLD_MEM = MEM;
+        OLD_MEM_CURR = MEM_CURR;
+        OLD_IND_DIFF = IND_DIFF;
+        OLD_IND_CURR = IND_CURR;
+
+        void* allocated = malloc(MEM_SIZE);
+        MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
+        MEM_CURR = 0;
+
+        allocated = malloc(IND_SIZE);
+        IND_DIFF = (unsigned long long*)memset(allocated, 0, IND_SIZE);
+        IND_CURR = 0;
+        printf("[CLAMP] %s %d %p %d %p %d %p %d %p %d\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM, OLD_MEM_CURR, OLD_IND_DIFF, OLD_IND_CURR, MEM, MEM_CURR, IND_DIFF, IND_CURR);
+
+        for (int i = 0; i < OLD_IND_CURR; i++)
+        {
+            size_t diff = OLD_IND_DIFF[i] & 0xffffffff;
+            uint8_t** oldAddr = (uint8_t**)(OLD_MEM + diff);
+            uint8_t* oldObj = *oldAddr;
+            printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, oldObj);
+            if ((((Object*)oldObj)->GetHeader()->GetBits() & BIT_SBLK_GC_MARK) == 0)
+            {
+                continue;
+            }
+
+            size_t bias = (uintptr_t)oldObj - (uintptr_t)oldAddr;
+            _ASSERTE(bias == 8 || bias == 12);
+            if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)MEM_CURR & 0x7))
+            {
+                bias = bias == 8 ? 12 : 8;
+            }
+
+            size_t size = (OLD_IND_DIFF[i+1] == 0 ? (size_t)OLD_MEM_CURR : (size_t)OLD_IND_DIFF[i+1] & 0xffffffff) - diff - bias + 4;
+
+            uint8_t** newAddr = (uint8_t**)(MEM + MEM_CURR);
+            uint8_t* newObj = (uint8_t*)(newAddr + bias);
+            *newAddr = newObj;
+            *oldAddr = newObj;
+            printf("[CLAMP] %s %d %p %p %p %p %d %llu %llu %d %d\n", __PRETTY_FUNCTION__, __LINE__,
+                    newObj - 4, oldObj - 4, newObj, oldObj,
+                    size, OLD_IND_DIFF[i], OLD_IND_DIFF[i+1], OLD_MEM_CURR,
+                    bias);
+            memcpy(newObj - 4, oldObj - 4, size);
+
+            IND_DIFF[IND_CURR++] = MEM_CURR;
+            MEM_CURR += size + bias;
+        }
+#if 0
+
         void* allocated = malloc(MEM_SIZE);
         uint8_t* newMem = (uint8_t*)memcpy(allocated, MEM, MEM_CURR);
         MEM_DIFF = (ssize_t)newMem - (ssize_t)MEM;
@@ -860,6 +910,7 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
         OLD_MEM_CURR = MEM_CURR;
         MEM = newMem;
         printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR);
+#endif // 0
     }
     else if(!GC_RELOCATE_PHASE)
     {
