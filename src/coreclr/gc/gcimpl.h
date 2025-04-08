@@ -131,10 +131,17 @@ public:
 
     int CollectionCount (int generation, int get_bgc_fgc_count = 0);
 
-    // promote an object
+    // Promote an object
     PER_HEAP_ISOLATED void    Promote (Object** object,
                                           ScanContext* sc,
                                           uint32_t flags=0);
+#ifdef FEATURE_NEW_GC
+    // Mark an object
+    PER_HEAP_ISOLATED void    Mark (Object** object,
+                                          ScanContext* sc,
+                                          uint32_t flags=0);
+#endif // FEATURE_NEW_GC
+
 
     // Find the relocation address for an object
     PER_HEAP_ISOLATED void    Relocate (Object** object,
@@ -144,7 +151,7 @@ public:
 
     HRESULT Init (size_t heapSize);
 
-    //Register an object for finalization
+    // Register an object for finalization
     bool    RegisterForFinalization (int gen, Object* obj);
 
     //Unregister an object for finalization

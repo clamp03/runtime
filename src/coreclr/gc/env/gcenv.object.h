@@ -25,6 +25,7 @@ extern bool g_oldMethodTableFlags;
 // handle sync blocks).
 #define BIT_SBLK_GC_RESERVE                 0x20000000
 #define BIT_SBLK_FINALIZER_RUN              0x40000000
+#define BIT_SBLK_GC_MARK                    0x80000000
 
 // The sync block index header (small structure that immediately precedes every object in the GC heap). Only
 // the GC uses this so far, and only to store a couple of bits of information.
@@ -42,6 +43,8 @@ public:
     void ClrBit(uint32_t uBit) { Interlocked::And(&m_uSyncBlockValue, ~uBit); }
     void SetGCBit() { m_uSyncBlockValue |= BIT_SBLK_GC_RESERVE; }
     void ClrGCBit() { m_uSyncBlockValue &= ~BIT_SBLK_GC_RESERVE; }
+    void SetGCMarkBit() { m_uSyncBlockValue |= BIT_SBLK_GC_MARK; }
+    void ClrGCMarkBit() { m_uSyncBlockValue &= ~BIT_SBLK_GC_MARK; }
 };
 
 static_assert(sizeof(ObjHeader) == sizeof(uintptr_t), "this assumption is made by the VM!");
@@ -161,6 +164,7 @@ class ObjectInternal
 public:
     MethodTable * m_pMethTab;
 };
+
 class Object
 {
 public:

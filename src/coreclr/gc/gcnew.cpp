@@ -21,8 +21,8 @@ IGCHeapInternal* CreateGCHeap() {
     return new(nothrow) GCHeap();
 }
 
-uint8_t* MEM = NULL;
 size_t   MEM_SIZE = 1024 * 1024 * 10;
+uint8_t* MEM = NULL;
 size_t   MEM_CURR = 0;
 uint8_t* OLD_MEM = NULL;
 size_t   OLD_MEM_CURR = 0;
@@ -31,16 +31,20 @@ uint8_t* PINNED_MEM = NULL;
 size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
 size_t   PINNED_MEM_CURR = 0;
 
-size_t* IND_DIFF = NULL;
-size_t  IND_COUNTER = 0;
+size_t  IND_SIZE = 1024;
+unsigned long long* IND_DIFF = NULL;
+size_t  IND_CURR = 0;
+unsigned long long* OLD_IND_DIFF = NULL;
+size_t  OLD_IND_CURR = 0;
+
 ssize_t MEM_DIFF = 0;
 
 bool IsInProgress = false;
 bool IsSuspensionPending = false;
 
 bool GC_MARK_PHASE = false;
-bool GC_COLLECT_PHASE = false;
 bool GC_COPY_PHASE = false;
+bool GC_RELOCATE_PHASE = false;
 
 #define SPECIAL_HEADER_BITS (0x3)
 
@@ -225,7 +229,7 @@ HRESULT GCHeap::Initialize()
         void* pinned_allocated = malloc(PINNED_MEM_SIZE);
         MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
         PINNED_MEM = (uint8_t*)memset(pinned_allocated, 0, PINNED_MEM_SIZE);
-        IND_DIFF = (size_t*)malloc(sizeof(size_t) * 1024);
+        IND_DIFF = (unsigned long long*)malloc(sizeof(unsigned long long) * IND_SIZE);
         fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p %p %p\n",
                 MEM, MEM + MEM_SIZE, PINNED_MEM, PINNED_MEM + PINNED_MEM_SIZE);
     }
@@ -617,12 +621,12 @@ void mark_object_simple(uint8_t** po)
                 if (oo != nullptr && !marked(oo))
                 {
                     set_marked(oo);
-                    if ((uintptr_t)oo >= (uintptr_t)OLD_MEM && (uintptr_t)oo < (uintptr_t)(OLD_MEM + OLD_MEM_CURR))
+                    if (MEM <= oo && oo < MEM + MEM_CURR)
                     {
-                        printf("[CLAMP] mark_object_simple %p %p\n", oo, oo + MEM_DIFF);
-                        *(uint8_t**)poo = (oo + MEM_DIFF);
+                       ((Object*)po)->GetHeader()->SetGCMarkBit();
                     }
-                    if (oo && contain_pointers_or_collectible(oo))
+
+                    if (contain_pointers_or_collectible(oo))
                     {
                         mark_object_simple(poo);
                     }
@@ -632,28 +636,77 @@ void mark_object_simple(uint8_t** po)
     );
 }
 
-void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
-        uint32_t flags)
+void GCHeap::Mark(Object** ppObject, ScanContext* sc, uint32_t flags)
 {
-    uint8_t* o = (uint8_t*)*ppObject;
-    if (o == NULL)
+    uint8_t* po = (uint8_t*)*ppObject;
+    if (po == NULL)
     {
         return;
-    }
-
-    printf("[CLAMP] Updated %s %d Check %p to %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, o + MEM_DIFF, flags);
-    if ((uintptr_t)o >= (uintptr_t)OLD_MEM && (uintptr_t)o < (uintptr_t)(OLD_MEM + OLD_MEM_CURR))
-    {
-        *ppObject = (Object*)(o + MEM_DIFF);
     }
 
     if (flags & GC_CALL_INTERIOR)
     {
         // TODO Something later
     }
-    else if (contain_pointers_or_collectible(o))
+    else if (contain_pointers_or_collectible(po))
     {
         mark_object_simple((uint8_t**)ppObject);
+    }
+    if (MEM <= po && po < MEM + MEM_CURR)
+    {
+
+        ((Object*)po)->GetHeader()->SetGCMarkBit();
+    }
+    //set_marked(po);
+}
+
+void copy_object_simple(uint8_t** po)
+{
+    uint8_t* o = *po;
+    size_t s = size(o);
+    go_through_object_cl(method_table(o), o, s, poo, {
+                uint8_t* oo = *poo;
+                if (oo != nullptr && !marked(oo))
+                {
+                    set_marked(oo);
+                    if ((uintptr_t)oo >= (uintptr_t)OLD_MEM && (uintptr_t)oo < (uintptr_t)(OLD_MEM + OLD_MEM_CURR))
+                    {
+                        printf("[CLAMP] copy_object_simple %p %p\n", oo, oo + MEM_DIFF);
+                        *(uint8_t**)poo = (oo + MEM_DIFF);
+                    }
+                    if (contain_pointers_or_collectible(oo))
+                    {
+                        copy_object_simple(poo);
+                    }
+                    clear_marked(oo);
+                }
+            }
+    );
+}
+
+
+void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
+        uint32_t flags)
+{
+    uint8_t* po = (uint8_t*)*ppObject;
+    if (po == NULL)
+    {
+        return;
+    }
+
+    printf("[CLAMP] Updated %s %d Check %p to %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, po + MEM_DIFF, flags);
+    if ((uintptr_t)po >= (uintptr_t)OLD_MEM && (uintptr_t)po < (uintptr_t)(OLD_MEM + OLD_MEM_CURR))
+    {
+        *ppObject = (Object*)(po + MEM_DIFF);
+    }
+
+    if (flags & GC_CALL_INTERIOR)
+    {
+        // TODO Something later
+    }
+    else if (contain_pointers_or_collectible(po))
+    {
+        copy_object_simple((uint8_t**)ppObject);
     }
 }
 
@@ -728,7 +781,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         obj += bias;
         *(uintptr_t*)ret = (uintptr_t)obj;
         printf("[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, MEM_CURR);
-        IND_DIFF[IND_COUNTER++] = MEM_CURR;
+        IND_DIFF[IND_CURR++] = MEM_CURR;
         MEM_CURR += size;
 
         return (Object*)ret;
@@ -749,15 +802,14 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
 HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
 {
 
-    if (IND_COUNTER % 50 == 0)
+    if (IND_CURR % 50 == 0)
     {
-        fprintf(stderr, "[CLAMP] COUNT %d\n", IND_COUNTER);
+        fprintf(stderr, "[CLAMP] COUNT %d\n", IND_CURR);
     }
-    if (IND_COUNTER == 0 || IND_COUNTER % 100 != 0)
+    if (IND_CURR == 0 || IND_CURR % 100 != 0)
     {
         return S_OK;
     }
-    /*
     if (!GC_MARK_PHASE)
     {
         GC_MARK_PHASE = true;
@@ -765,53 +817,53 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
         ScanContext sc;
         sc.thread_number = 0;
         sc.thread_count = 1;
-        sc.promotion = FALSE;
+        sc.promotion = TRUE;
         sc.concurrent = FALSE;
         sc.stack_limit = 0;
         GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
-        GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
-        GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
-
-        OLD_MEM = (uint8_t*)memset(OLD_MEM, 0, MEM_SIZE);
-        free(OLD_MEM);
+        GCScan::GcScanRoots(GCHeap::Mark, 0, 0, &sc);
+        GCScan::GcScanHandles(GCHeap::Mark, 0, 0, &sc);
+        /*
+        for (int i = 0; i < IND_CURR; i++)
+        {
+            Object* ind = *(Object**)(MEM + IND_DIFF[i]);
+            clear_marked(ind);
+        }
+        */
         GCToEEInterface::RestartEE(TRUE);
         printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
-        OLD_MEM = NULL;
-        OLD_MEM_CURR = 0;
-
     }
-    else*/ if (!GC_COLLECT_PHASE)
+    else if (!GC_COPY_PHASE)
     {
-        GC_COLLECT_PHASE = true;
+        GC_COPY_PHASE = true;
 
         void* allocated = malloc(MEM_SIZE);
         uint8_t* newMem = (uint8_t*)memcpy(allocated, MEM, MEM_CURR);
         MEM_DIFF = (ssize_t)newMem - (ssize_t)MEM;
         printf("[CLAMP] %s %d MEM: %p => %p\n", __PRETTY_FUNCTION__, __LINE__, MEM, newMem);
-        for (int i = 0; i < IND_COUNTER; i++)
+        for (int i = 0; i < IND_CURR; i++)
         {
-            size_t diff = IND_DIFF[i];
+            size_t diff = IND_DIFF[i] & 0xffffffff;
             uint8_t** oldAddr = (uint8_t**)(MEM + diff);
             uint8_t** newAddr = (uint8_t**)(newMem + diff);
 
             // Invalidate contents of old object
             uint8_t* oldObj = *oldAddr;
-            ((uintptr_t*)oldObj)[0] = 0;
-            ((uintptr_t*)oldObj)[1] = 0;
 
             // Copy indirection data
             *newAddr = oldObj + MEM_DIFF;
             *oldAddr = *newAddr;
             printf("[CLAMP] %s %d OBJ: %p %p %p => %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, oldObj, *oldAddr, newAddr, *newAddr);
         }
+
         OLD_MEM = MEM;
         OLD_MEM_CURR = MEM_CURR;
         MEM = newMem;
-        printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_COUNTER);
+        printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR);
     }
-    else if(!GC_COPY_PHASE)
+    else if(!GC_RELOCATE_PHASE)
     {
-        GC_COPY_PHASE = true;
+        GC_RELOCATE_PHASE = true;
 
         printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
         ScanContext sc;
