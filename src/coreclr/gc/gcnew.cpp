@@ -38,8 +38,9 @@ ssize_t MEM_DIFF = 0;
 bool IsInProgress = false;
 bool IsSuspensionPending = false;
 
-bool GC_COLLECTED = false;
-bool GC_MOVED = false;
+bool GC_MARK_PHASE = false;
+bool GC_COLLECT_PHASE = false;
+bool GC_COPY_PHASE = false;
 
 #define SPECIAL_HEADER_BITS (0x3)
 
@@ -688,10 +689,10 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         assert(PINNED_MEM_CURR + size < PINNED_MEM_SIZE);
         // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
-        size_t diff = PINNED_MEM_CURR + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
-        uint8_t* ret = ((uint8_t*)PINNED_MEM + diff);
+        uint8_t* ret = PINNED_MEM + PINNED_MEM_CURR;
+        uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj ointer
         uint8_t bias = 0;
-        if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)
+        if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
         {
             bias += 4;
         }
@@ -700,22 +701,22 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         {
             bias = 4 - bias;
         }
-        ret += bias;
-        *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
+        obj += bias;
+        *(uintptr_t*)ret = (uintptr_t)obj;
+        printf("[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, PINNED_MEM_CURR);
         PINNED_MEM_CURR += size;
-        printf("[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, PINNED_MEM_CURR);
 
-        return (Object*)(ret - 8);
+        return (Object*)ret;
     }
     else
     {
         assert(MEM_CURR + size < MEM_SIZE);
         // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
-        size_t diff = MEM_CURR + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
-        uint8_t* ret = ((uint8_t*)MEM + diff);
+        uint8_t* ret = MEM + MEM_CURR;
+        uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
         uint8_t bias = 0;
-        if (flags & GC_ALLOC_ALIGN8 && ((size_t) ret & 7) != 0)
+        if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
         {
             bias += 4;
         }
@@ -724,14 +725,13 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         {
             bias = 4 - bias;
         }
-        ret += bias;
-        diff += bias;
-        *(uintptr_t*)(ret - 8) = (uintptr_t)ret;
-        IND_DIFF[IND_COUNTER++] = diff - 8;
+        obj += bias;
+        *(uintptr_t*)ret = (uintptr_t)obj;
+        printf("[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, MEM_CURR);
+        IND_DIFF[IND_COUNTER++] = MEM_CURR;
         MEM_CURR += size;
-        printf("[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret - 8, ret, size, MEM_CURR);
 
-        return (Object*)(ret - 8);
+        return (Object*)ret;
     }
 }
 
@@ -748,14 +748,41 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
 
 HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
 {
+
+    if (IND_COUNTER % 50 == 0)
+    {
+        fprintf(stderr, "[CLAMP] COUNT %d\n", IND_COUNTER);
+    }
     if (IND_COUNTER == 0 || IND_COUNTER % 100 != 0)
     {
         return S_OK;
     }
-
-    if (!GC_COLLECTED)
+    /*
+    if (!GC_MARK_PHASE)
     {
-        GC_COLLECTED = true;
+        GC_MARK_PHASE = true;
+        printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
+        ScanContext sc;
+        sc.thread_number = 0;
+        sc.thread_count = 1;
+        sc.promotion = FALSE;
+        sc.concurrent = FALSE;
+        sc.stack_limit = 0;
+        GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+        GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
+        GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
+
+        OLD_MEM = (uint8_t*)memset(OLD_MEM, 0, MEM_SIZE);
+        free(OLD_MEM);
+        GCToEEInterface::RestartEE(TRUE);
+        printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
+        OLD_MEM = NULL;
+        OLD_MEM_CURR = 0;
+
+    }
+    else*/ if (!GC_COLLECT_PHASE)
+    {
+        GC_COLLECT_PHASE = true;
 
         void* allocated = malloc(MEM_SIZE);
         uint8_t* newMem = (uint8_t*)memcpy(allocated, MEM, MEM_CURR);
@@ -782,9 +809,9 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
         MEM = newMem;
         printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_COUNTER);
     }
-    else if(!GC_MOVED)
+    else if(!GC_COPY_PHASE)
     {
-        GC_MOVED = true;
+        GC_COPY_PHASE = true;
 
         printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
         ScanContext sc;
