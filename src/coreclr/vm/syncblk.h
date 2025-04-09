@@ -88,10 +88,9 @@ typedef DPTR(EnCSyncBlockInfo) PTR_EnCSyncBlockInfo;
 // reducing the mask.  We use the very high bit, in _DEBUG, to be sure we never forget
 // to mask the Value to obtain the Index
 
-//#define BIT_SBLK_UNUSED                     0x80000000
+#define BIT_SBLK_UNUSED                     0x80000000
 #define BIT_SBLK_FINALIZER_RUN              0x40000000
 #define BIT_SBLK_GC_RESERVE                 0x20000000
-#define BIT_SBLK_GC_MARK                    0x80000000
 
 // This lock is only taken when we need to modify the index value in m_SyncBlockValue.
 // It should not be taken if the object already has a real syncblock index.
@@ -1585,20 +1584,6 @@ class ObjHeader
 
         m_SyncBlockValue.RawValue() &= ~BIT_SBLK_GC_RESERVE;
     }
-
-    void SetGCMarkBit()
-    {
-        LIMITED_METHOD_CONTRACT;
-
-        m_SyncBlockValue.RawValue() |= BIT_SBLK_GC_MARK;
-    }
-    void ClrGCMarkBit()
-    {
-        LIMITED_METHOD_CONTRACT;
-
-        m_SyncBlockValue.RawValue() &= ~BIT_SBLK_GC_MARK;
-    }
-
 
     // Don't bother masking out the index since anyone who wants bits will presumably
     // restrict the bits they consider.

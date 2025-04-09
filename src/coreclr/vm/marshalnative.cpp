@@ -390,9 +390,11 @@ FCIMPL1(LPVOID, MarshalNative::GCHandleInternalGet, OBJECTHANDLE handle)
 {
     FCALL_CONTRACT;
 
+    // TODO FIX: pass ObjectInternal IntPtr not Object from System.WeakReference`1[System._Canon]:get_Target():System._Canon:this
+    //return handle;
     OBJECTREF objRef;
 
-    objRef = ObjectFromHandle(handle);
+    objRef = ObjectFromHandle((OBJECTHANDLE)handle);
 
     return *((LPVOID*)&objRef);
 }
