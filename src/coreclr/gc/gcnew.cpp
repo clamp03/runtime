@@ -858,6 +858,85 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
     return NULL;
 }
 
+void ngc_thread(void* arg)
+{
+    printf("[CLAMP] RUN NGC THREAD\n");
+    if (!GC_COPY_PHASE)
+    {
+        printf("[CLAMP] BEFORE %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, OLD_IND_CURR);
+        for (int i = 0; i < OLD_IND_CURR; i++)
+        {
+            if ((i % 10) == 0) GCToOSInterface::Sleep(3);
+            size_t diff = OLD_IND_DIFF[i];
+            uint8_t** oldAddr = (uint8_t**)(OLD_MEM + diff);
+            uint8_t* oldObj = *oldAddr;
+            printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, oldObj);
+            if (*((uintptr_t*)oldAddr + 1) != GC_MARKED)
+            {
+                continue;
+            }
+
+            size_t bias = (uintptr_t)oldObj - (uintptr_t)oldAddr;
+            size_t biasType = 0;
+            _ASSERTE(bias == 12 || bias == 16);
+            if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)MEM_CURR & 0x7))
+            {
+                size_t biasType = bias == 12 ? 1 : 2;
+                bias = bias == 12 ? 16 : 12;
+            }
+
+            size_t size = (OLD_IND_DIFF[i+1] == 0 ? (size_t)OLD_MEM_CURR : (size_t)OLD_IND_DIFF[i+1]) - diff - bias + sizeof(ObjHeader);
+
+            uint8_t** newAddr = (uint8_t**)(MEM + MEM_CURR);
+            uint8_t* newObj = (uint8_t*)newAddr + bias;
+            *newAddr = newObj;
+            *oldAddr = newObj;
+            printf("[CLAMP] %s %d %p %p %p %p %d %d %d %d %d %p %p\n", __PRETTY_FUNCTION__, __LINE__,
+                    newObj - 4, oldObj - 4, newObj, oldObj,
+                    size, OLD_IND_DIFF[i], OLD_IND_DIFF[i+1], OLD_MEM_CURR,
+                    bias, newAddr, oldAddr);
+            printf("[CLAMP] %s %d %p %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldObj, newObj, oldAddr, newAddr);
+            memcpy(newObj - sizeof(ObjHeader), oldObj - sizeof(ObjHeader), size);
+            *((uint8_t**)oldAddr + 1) = MEM + MEM_CURR + biasType;
+
+            IND_DIFF[IND_CURR++] = MEM_CURR;
+            MEM_CURR += size + bias - 4;
+        }
+        printf("[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, OLD_IND_CURR);
+    }
+    printf("[CLAMP] DONE COPYING\n");
+    GC_COPY_PHASE = true;
+
+    /*
+    if(!GC_RELOCATE_PHASE)
+    {
+        GC_RELOCATE_PHASE = true;
+
+        printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
+        ScanContext sc;
+        sc.thread_number = 0;
+        sc.thread_count = 1;
+        sc.promotion = FALSE;
+        sc.concurrent = FALSE;
+        sc.stack_limit = 0;
+        GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+        GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
+        GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
+
+        //OLD_MEM = (uint8_t*)memset(OLD_MEM, 0, MEM_SIZE);
+        free(OLD_MEM);
+        free(OLD_IND_DIFF);
+        OLD_MEM = NULL;
+        OLD_MEM_CURR = 0;
+        OLD_IND_DIFF = NULL;
+        OLD_IND_CURR = 0;
+        GCToEEInterface::RestartEE(TRUE);
+        printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
+    }
+    printf("[CLAMP] DONE RELOCATION\n");
+    */
+}
+
 HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
 {
 
@@ -866,13 +945,12 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
     {
         printf("[CLAMP] COUNT %d\n", COUNTER);
     }
-    if (COUNTER == 0 || COUNTER % 100 != 0)
+    if (!GC_COPY_PHASE && (COUNTER == 0 || COUNTER % 100 != 0))
     {
         return S_OK;
     }
     if (!GC_MARK_PHASE)
     {
-        GC_MARK_PHASE = true;
         printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
         ScanContext sc;
         sc.thread_number = 0;
@@ -907,7 +985,10 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
 
         GCToEEInterface::RestartEE(TRUE);
         printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
+        GCToEEInterface::CreateThread(ngc_thread, NULL, false, ".NET NGC");
+        GC_MARK_PHASE = true;
     }
+#if 0
     else if (!GC_COPY_PHASE)
     {
         GC_COPY_PHASE = true;
@@ -951,7 +1032,8 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
         }
         printf("[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, OLD_IND_CURR);
     }
-    else if(!GC_RELOCATE_PHASE)
+#endif
+    else if(GC_COPY_PHASE && !GC_RELOCATE_PHASE)
     {
         GC_RELOCATE_PHASE = true;
 
