@@ -675,7 +675,7 @@ void relocate_object_simple(uint8_t** po)
                     set_marked(oo);
                     if ((uintptr_t)oo >= (uintptr_t)OLD_MEM && (uintptr_t)oo < (uintptr_t)(OLD_MEM + OLD_MEM_CURR))
                     {
-                        printf("[CLAMP] relocate_object_simple %p %p\n", *((uint8_t**)oo + 1), *(uint8_t**)poo);
+                        printf("[CLAMP] relocate_object_simple %p %p\n", (void*)(*((uintptr_t*)oo + 1) & ~0x3), *(uint8_t**)poo);
                         *poo= (uint8_t*)(*((uintptr_t*)oo + 1) & ~0x3);
                         assert(*poo != (void*)0x0 && *poo != (void*)0x1);
                     }
@@ -753,7 +753,7 @@ void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
 
     if ((uintptr_t)po >= (uintptr_t)OLD_MEM && (uintptr_t)po < (uintptr_t)(OLD_MEM + OLD_MEM_CURR))
     {
-        printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, *((Object**)po + 1));
+        printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, (void*)(*((uintptr_t*)po + 1) & ~0x3));
         *ppObject = (Object*)(*((uintptr_t*)po + 1) & ~0x3);
         assert(*ppObject != (void*)0x0 && *ppObject != (void*)0x1);
     }
@@ -801,6 +801,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         // printf("[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
         uint8_t* ret = PINNED_MEM + PINNED_MEM_CURR;
+        PINNED_MEM_CURR += size;
         uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
         uint8_t bias = 0;
         if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
@@ -814,8 +815,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         }
         obj += bias;
         *(uintptr_t*)ret = (uintptr_t)obj;
-        printf("[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, PINNED_MEM_CURR);
-        PINNED_MEM_CURR += size;
+        printf("[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, PINNED_MEM_CURR - size);
 
         return (Object*)ret;
     }
@@ -825,6 +825,8 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         // printf("[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
 
         uint8_t* ret = MEM + MEM_CURR;
+        IND_DIFF[IND_CURR++] = MEM_CURR;
+        MEM_CURR += size;
         uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4 + 4); // ObjHeader + m_pObj pointer + next pointer
         uint8_t bias = 0;
         if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
@@ -839,9 +841,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         obj += bias;
         *(uintptr_t*)ret = (uintptr_t)obj;
         // *((uintptr_t*)ret + 1) = 0;
-        printf("[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, MEM_CURR);
-        IND_DIFF[IND_CURR++] = MEM_CURR;
-        MEM_CURR += size;
+        printf("[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, MEM_CURR - size);
 
         return (Object*)ret;
     }
@@ -876,31 +876,34 @@ void ngc_thread(void* arg)
                 continue;
             }
 
-            size_t bias = (uintptr_t)oldObj - (uintptr_t)oldAddr;
+            size_t oldBias = (uintptr_t)oldObj - (uintptr_t)oldAddr;
             size_t biasType = 0;
-            _ASSERTE(bias == 12 || bias == 16);
+            size_t biasOff = 0;
+            _ASSERTE(oldBias == 12 || oldBias == 16);
             if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)MEM_CURR & 0x7))
             {
-                size_t biasType = bias == 12 ? 1 : 2;
-                bias = bias == 12 ? 16 : 12;
+                biasType = (oldBias == 12 ? 1 : 2);
+                biasOff = (oldBias == 12 ? 4 : -4);
             }
 
-            size_t size = (OLD_IND_DIFF[i+1] == 0 ? (size_t)OLD_MEM_CURR : (size_t)OLD_IND_DIFF[i+1]) - diff - bias + sizeof(ObjHeader);
+            size_t size = (OLD_IND_DIFF[i+1] == 0 ? (size_t)OLD_MEM_CURR : (size_t)OLD_IND_DIFF[i+1]) - diff;
+            size_t copyingSize = size - oldBias + sizeof(ObjHeader);
 
             uint8_t** newAddr = (uint8_t**)(MEM + MEM_CURR);
-            uint8_t* newObj = (uint8_t*)newAddr + bias;
+            IND_DIFF[IND_CURR++] = MEM_CURR;
+            MEM_CURR += size + biasOff;
+
+            uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + oldBias + biasOff);
             *newAddr = newObj;
             *oldAddr = newObj;
-            printf("[CLAMP] %s %d %p %p %p %p %d %d %d %d %d %p %p\n", __PRETTY_FUNCTION__, __LINE__,
+            printf("[CLAMP] %s %d %p %p %p %p %d %d %d %d %d %d %p %p\n", __PRETTY_FUNCTION__, __LINE__,
                     newObj - 4, oldObj - 4, newObj, oldObj,
                     size, OLD_IND_DIFF[i], OLD_IND_DIFF[i+1], OLD_MEM_CURR,
-                    bias, newAddr, oldAddr);
-            printf("[CLAMP] %s %d %p %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldObj, newObj, oldAddr, newAddr);
-            memcpy(newObj - sizeof(ObjHeader), oldObj - sizeof(ObjHeader), size);
-            *((uint8_t**)oldAddr + 1) = MEM + MEM_CURR + biasType;
+                    oldBias, biasOff, newAddr, oldAddr);
+            memcpy(newObj - sizeof(ObjHeader), oldObj - sizeof(ObjHeader), copyingSize);
+            *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr+ biasType;
+            printf("[CLAMP] %s %d %p %p %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldObj, newObj, oldAddr, newAddr, (void*)((uintptr_t)newAddr + biasType));
 
-            IND_DIFF[IND_CURR++] = MEM_CURR;
-            MEM_CURR += size + bias - 4;
         }
         printf("[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, OLD_IND_CURR);
     }
