@@ -725,16 +725,20 @@ void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
                 uintptr_t nextAddr = (uintptr_t)(OLD_MEM + (mid + 1 >= IND_CURR ? OLD_MEM_CURR : IND_DIFF[mid + 1]));
                 if (poAddr < nextAddr)
                 {
+                    size_t offset = poAddr - (size_t)midAddr;
                     uintptr_t addrInfo = *((uintptr_t*)midAddr + 1);
-                    bool biased = (addrInfo & OBJ_BIASED) != 0;
-                    uint8_t* newObj = (uint8_t*)(addrInfo & ~0x3);
-                    size_t offset = 12;
-                    if (biased)
+                    uint8_t biasType = addrInfo & 0x3 ;
+                    uintptr_t newAddr = (uintptr_t)(addrInfo & ~0x3);
+                    if (biasType == 1)
                     {
                         offset += 4;
                     }
-                    *ppObject = (Object*)(newObj - offset);
-                    printf("[CLAMP] HANDLE INTERIOR %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, *ppObject);
+                    else
+                    {
+                        offset -= 4;
+                    }
+                    *ppObject = (Object*)(newAddr + offset);
+                    printf("[CLAMP] HANDLE INTERIOR %s %d %p 0x%x 0x%x 0x%x 0x%x 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, poAddr, midAddr, nextAddr, newAddr, offset, biasType);
                     break;
                 }
                 else
@@ -884,9 +888,11 @@ void ngc_thread(void* arg)
             size_t offset = Interlocked::ExchangeAdd(&MEM_CURR, size);
             uint8_t** newAddr = (uint8_t**)(MEM + offset);
             bool newBiased = oldBiased;
+            uint8_t biasType = 0;
             if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)newAddr & 0x7))
             {
                 newBiased = !oldBiased;
+                biasType = newBiased ? 1 : 2; // 1 for Increase and 2 for Decrease
             }
 
             uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
@@ -894,10 +900,9 @@ void ngc_thread(void* arg)
             *newAddr = newObj;
             *oldAddr = newObj;
 
-            *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr+ (newBiased ? OBJ_BIASED : 0);
+            *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr + biasType;
             idx += size;
             printf("[CLAMP] %s %d %p %p %p %p %p %p %d %d\n", __PRETTY_FUNCTION__, __LINE__, oldObj, newObj, oldAddr, newAddr, *oldAddr, *newAddr, oldBiased, newBiased);
-
         }
         printf("[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
     }
@@ -913,7 +918,7 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
     {
         printf("[CLAMP] COUNT %d\n", COUNTER);
     }
-    if (!GC_COPY_PHASE && (COUNTER == 0 || COUNTER % 100 != 0))
+    if (!GC_COPY_PHASE && (COUNTER == 0 || COUNTER % 200 != 0))
     {
         return S_OK;
     }
