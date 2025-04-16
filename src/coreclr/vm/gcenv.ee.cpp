@@ -1121,6 +1121,10 @@ void GCToEEInterface::StompWriteBarrier(WriteBarrierParameters* args)
         assert(!"should never be called without FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP");
 #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
         break;
+    case WriteBarrierOp::InitializeNewGC:
+        g_copying_address = args->copying_address;
+        printf("[CLAMP] NEW GC InitializeNewGC Stomp %p 0x%x\n", g_copying_address, *g_copying_address);
+        break;
     default:
         assert(!"unknown WriteBarrierOp enum");
     }

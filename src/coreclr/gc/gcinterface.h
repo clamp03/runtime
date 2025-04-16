@@ -52,7 +52,8 @@ enum class WriteBarrierOp
     StompEphemeral,
     Initialize,
     SwitchToWriteWatch,
-    SwitchToNonWriteWatch
+    SwitchToNonWriteWatch,
+    InitializeNewGC
 };
 
 // Arguments to GCToEEInterface::StompWriteBarrier
@@ -113,6 +114,8 @@ struct WriteBarrierParameters
 
     // whether to use the more precise but slower write barrier
     bool region_use_bitwise_write_barrier;
+
+    uintptr_t* copying_address;
 };
 
 struct FinalizerWorkItem

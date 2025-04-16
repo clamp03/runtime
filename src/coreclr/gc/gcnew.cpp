@@ -35,6 +35,8 @@ size_t  IND_SIZE = 4 * 1024;
 size_t* IND_DIFF = NULL;
 size_t  IND_CURR = 0;
 
+uintptr_t g_gc_copying_address = NULL;
+
 size_t COUNTER = 0;
 
 ssize_t MEM_DIFF = 0;
@@ -232,6 +234,12 @@ HRESULT GCHeap::Initialize()
         IND_DIFF = (size_t*)malloc(IND_SIZE);
         printf("[CLAMP] GCHeap::Initialize %p %p %p %p\n",
                 MEM, MEM + MEM_SIZE, PINNED_MEM, PINNED_MEM + PINNED_MEM_SIZE);
+
+        WriteBarrierParameters args = {};
+        args.operation = WriteBarrierOp::InitializeNewGC;
+        args.copying_address = &g_gc_copying_address;
+        printf("[CLAMP] copying_address %p 0x%d\n", &g_gc_copying_address, g_gc_copying_address);
+        GCToEEInterface::StompWriteBarrier(&args);
     }
     return S_OK;
 }
@@ -886,6 +894,7 @@ void ngc_thread(void* arg)
 
             bool oldBiased = (info & OBJ_BIASED) == OBJ_BIASED;
             size_t offset = Interlocked::ExchangeAdd(&MEM_CURR, size);
+            assert(offset + size < MEM_SIZE);
             uint8_t** newAddr = (uint8_t**)(MEM + offset);
             bool newBiased = oldBiased;
             uint8_t biasType = 0;
@@ -896,9 +905,16 @@ void ngc_thread(void* arg)
             }
 
             uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
-            memcpy(newAddr + 1 + 1 + (newBiased ? 1 : 0) , oldAddr + 1 + 1 + (oldBiased ? 1 : 0), size - 4 - 4);
             *newAddr = newObj;
+
+            // TODO Should be atomic
+            Interlocked::CompareExchange(&g_gc_copying_address, (uintptr_t)oldObj, (uintptr_t)0);
+            printf("[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_gc_copying_address);
+            memcpy(newAddr + 1 + 1 + (newBiased ? 1 : 0), oldAddr + 1 + 1 + (oldBiased ? 1 : 0), size - 4 - 4);
             *oldAddr = newObj;
+            Interlocked::CompareExchange(&g_gc_copying_address, (uintptr_t)0, (uintptr_t)oldObj);
+            printf("[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_gc_copying_address);
+            // **********
 
             *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr + biasType;
             idx += size;

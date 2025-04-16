@@ -41,6 +41,8 @@ bool g_sw_ww_enabled_for_gc_heap = false;
 
 #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
 
+uintptr_t* g_copying_address = nullptr;
+
 GVAL_IMPL_INIT(ee_alloc_context, g_global_alloc_context, {});
 
 thread_local ee_alloc_context::PerThreadRandom ee_alloc_context::t_random = PerThreadRandom();

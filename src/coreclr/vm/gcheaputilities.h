@@ -169,6 +169,8 @@ extern "C" uint8_t *g_sw_ww_table;
 extern "C" bool g_sw_ww_enabled_for_gc_heap;
 
 #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+       //
+extern "C" uintptr_t* g_copying_address;
 
 // g_gc_dac_vars is a structure of pointers to GC globals that the
 // DAC uses. It is not exposed directly to the DAC.
