@@ -9495,6 +9495,15 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     }
                     obj = nullptr;
                 }
+#ifdef FEATURE_NEW_GC
+#if 1
+                if (obj != nullptr)
+                {
+                    GenTreeCall* helperCall = gtNewHelperCallNode(CORINFO_HELP_NGC_BARRIER, TYP_VOID, gtCloneExpr(obj));
+                    impAppendTree(helperCall, CHECK_SPILL_ALL, impCurStmtDI);
+                }
+#endif
+#endif // FEATURE_NEW_GC
 
                 // Handle the cases that use the stored value (obj).
                 // Conveniently these don't trigger type initialization, so there aren't

@@ -1251,6 +1251,26 @@ HCIMPL2(Object*, JIT_Box, CORINFO_CLASS_HANDLE type, void* unboxedData)
 }
 HCIMPLEND
 
+HCIMPL1(VOID, JIT_NGC_Barrier, Object* obj)
+{
+    uintptr_t objInt = (uintptr_t)obj;
+    uintptr_t temp = 0;
+    // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
+    do
+    {
+        temp = InterlockedCompareExchangeT(g_copying_address, objInt, 0xffffffff);
+        if (temp == 0) return;
+        System_YieldProcessor();
+    } while (temp != 0xffffffff);
+
+    while (VolatileLoad(g_copying_address) == objInt)
+    {
+        System_YieldProcessor();
+    }
+    // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
+}
+HCIMPLEND
+
 /*************************************************************/
 HCIMPL2(BOOL, JIT_IsInstanceOfException, CORINFO_CLASS_HANDLE type, Object* obj)
 {
