@@ -52,8 +52,8 @@ enum class WriteBarrierOp
     StompEphemeral,
     Initialize,
     SwitchToWriteWatch,
-    SwitchToNonWriteWatch,
-    InitializeNewGC
+    SwitchToNonWriteWatch
+//    InitializeNewGC
 };
 
 // Arguments to GCToEEInterface::StompWriteBarrier
@@ -1026,6 +1026,11 @@ public:
 
     // Walk the heap object by object outside of a GC.
     virtual void DiagWalkHeapWithACHandling(walk_fn fn, void* context, int gen_number, bool walk_large_object_heap_p) PURE_VIRTUAL
+
+#ifdef FEATURE_NEW_GC
+    virtual void* RequestObjectCopy(void* addr, bool isInterior) PURE_VIRTUAL;
+    virtual void* UpdateInterioObject(void* objAddr, void* addr) PURE_VIRTUAL;
+#endif // FEATURE_NEW_GC
 };
 
 #ifdef WRITE_BARRIER_CHECK

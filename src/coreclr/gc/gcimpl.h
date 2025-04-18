@@ -250,6 +250,11 @@ public:	// FIX
     // Interface with gc_heap
     size_t  GarbageCollectTry (int generation, BOOL low_memory_p=FALSE, int mode=collection_blocking);
 
+#ifdef FEATURE_NEW_GC
+    void* RequestObjectCopy(void* addr, bool isInterior);
+    void* UpdateInterioObject(void* objAddr, void* addr);
+#endif // FEATURE_NEW_GC
+
     // frozen segment management functions
     virtual segment_handle RegisterFrozenSegment(segment_info *pseginfo);
     virtual void UnregisterFrozenSegment(segment_handle seg);

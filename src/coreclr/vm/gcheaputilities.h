@@ -170,7 +170,7 @@ extern "C" bool g_sw_ww_enabled_for_gc_heap;
 
 #endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
        //
-extern "C" uintptr_t* g_copying_address;
+// extern "C" uintptr_t* g_copying_address;
 
 // g_gc_dac_vars is a structure of pointers to GC globals that the
 // DAC uses. It is not exposed directly to the DAC.
@@ -254,6 +254,17 @@ public:
     {
         return s_useThreadAllocationContexts;
     }
+
+#ifdef FEATURE_NEW_GC
+    static void* RequestObjectCopy(void* addr, bool isInterior)
+    {
+        return GetGCHeap()->RequestObjectCopy(addr, isInterior);
+    }
+    static void* UpdateInterioObject(void* objAddr, void* addr)
+    {
+        return GetGCHeap()->UpdateInterioObject(objAddr, addr);
+    }
+#endif // FEATURE_NEW_GC
 
 #ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
 

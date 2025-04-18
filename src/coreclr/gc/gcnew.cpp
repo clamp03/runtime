@@ -235,11 +235,11 @@ HRESULT GCHeap::Initialize()
         printf("[CLAMP] GCHeap::Initialize %p %p %p %p\n",
                 MEM, MEM + MEM_SIZE, PINNED_MEM, PINNED_MEM + PINNED_MEM_SIZE);
 
-        WriteBarrierParameters args = {};
-        args.operation = WriteBarrierOp::InitializeNewGC;
-        args.copying_address = (uintptr_t*)&g_gc_copying_address;
-        printf("[CLAMP] copying_address %p 0x%d\n", &g_gc_copying_address, g_gc_copying_address);
-        GCToEEInterface::StompWriteBarrier(&args);
+        //WriteBarrierParameters args = {};
+        //args.operation = WriteBarrierOp::InitializeNewGC;
+        //args.copying_address = (uintptr_t*)&g_gc_copying_address;
+        //printf("[CLAMP] copying_address %p 0x%d\n", &g_gc_copying_address, g_gc_copying_address);
+        // GCToEEInterface::StompWriteBarrier(&args);
     }
     return S_OK;
 }
@@ -696,6 +696,28 @@ void relocate_object_simple(uint8_t** po)
     );
 }
 
+uint8_t** updateInteriorAddr(uint8_t** intAddr, uint8_t** oldAddr)
+{
+    uintptr_t addrInfo = *((uintptr_t*)oldAddr + 1);
+    uint8_t** newAddr = (uint8_t**)(addrInfo & ~0x3);
+    bool biasToggle = (addrInfo & OBJ_BIASED) != 0;
+    uint8_t* newObj = *newAddr;
+
+    uintptr_t offset = (uintptr_t)intAddr - (uintptr_t)oldAddr;
+    if (biasToggle)
+    {
+        if ((uintptr_t)newObj - (uintptr_t)newAddr == 12)
+        {
+            offset -= 4;
+        }
+        else
+        {
+            offset += 4;
+        }
+    }
+    return (uint8_t**)((uintptr_t)newAddr + offset);
+}
+
 void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
         uint32_t flags)
 {
@@ -734,25 +756,8 @@ void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
                 uintptr_t nextAddr = (uintptr_t)(OLD_MEM + (mid + 1 >= IND_CURR ? OLD_MEM_CURR : IND_DIFF[mid + 1]));
                 if (poAddr < nextAddr)
                 {
-                    size_t offset = poAddr - (size_t)midAddr;
-                    uintptr_t addrInfo = *((uintptr_t*)midAddr + 1);
-                    uintptr_t newAddr = (uintptr_t)(addrInfo & ~0x3);
-                    uintptr_t newObj = *(uintptr_t*)(newAddr);
-                    uint8_t biasToggle = addrInfo & OBJ_BIASED;
-
-                    if (biasToggle)
-                    {
-                        if (newObj - newAddr == 12)
-                        {
-                            offset -= 4;
-                        }
-                        else
-                        {
-                            offset += 4;
-                        }
-                    }
-                    *ppObject = (Object*)(newAddr + offset);
-                    printf("[CLAMP] HANDLE INTERIOR %s %d %p 0x%x 0x%x 0x%x 0x%x 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, poAddr, midAddr, nextAddr, newAddr, offset, biasToggle);
+                    *ppObject = (Object*)updateInteriorAddr((uint8_t**)poAddr, (uint8_t**)midAddr);
+                    printf("[CLAMP] HANDLE INTERIOR %s %d %p 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, *ppObject, poAddr, midAddr, nextAddr);
                     break;
                 }
                 else
@@ -872,6 +877,58 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
     return NULL;
 }
 
+uint8_t** findObjectAddress(uint8_t** addr)
+{
+    size_t start = 0;
+    size_t end = IND_CURR;
+    size_t poAddr = (size_t)addr;
+    while (start < end)
+    {
+        size_t mid = (start + end) / 2;
+
+        uint8_t** midAddr = (uint8_t**)(OLD_MEM + IND_DIFF[mid]);
+        if ((uintptr_t)midAddr > (uintptr_t)poAddr)
+        {
+            end = mid;
+        }
+        else
+        {
+            uintptr_t nextAddr = (uintptr_t)(OLD_MEM + (mid + 1 >= IND_CURR ? OLD_MEM_CURR : IND_DIFF[mid + 1]));
+            if (poAddr < nextAddr)
+            {
+                printf("[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, midAddr, nextAddr);
+                return midAddr;
+#if 0
+                if ((uintptr_t)*midAddr >= (uintptr_t)OLD_MEM && (uintptr_t)*midAddr < (uintptr_t)OLD_MEM + OLD_MEM_CURR)
+                {
+                    return midAddr;
+                }
+                else
+                {
+                    uintptr_t addrInfo = *((uintptr_t*)midAddr + 1);
+                    uintptr_t newAddr = (uintptr_t)(addrInfo & ~0x3);
+                    assert((addrInfo & GC_MARKED) == 0);
+                    uintptr_t newRefAddr = (uintptr_t)updateInteriorAddr(addr, midAddr, (uint8_t**)newAddr);
+                    Interlocked::Exchange(&g_gc_copying_address, newRefAddr);
+                    printf("[CLAMP] %s %d %p 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, midAddr, newAddr, newRefAddr);
+                    while (g_gc_copying_address != 0xffffffff)
+                    {
+                        YieldProcessor();
+                    }
+                    return nullptr;
+                }
+#endif
+            }
+            else
+            {
+                start = mid + 1;
+            }
+        }
+    }
+    assert(!"Cannot find object");
+    return nullptr;
+}
+
 void ngc_thread(void* arg)
 {
     printf("[CLAMP] RUN NGC THREAD\n");
@@ -881,7 +938,6 @@ void ngc_thread(void* arg)
         while (idx < OLD_MEM_CURR)
         {
             uint8_t** oldAddr = (uint8_t**)(OLD_MEM + idx);
-            uint8_t* oldObj = *oldAddr;
             size_t info = *((uintptr_t*)oldAddr + 1);
             size_t size = info & ~0x3;
             if ((info & GC_MARKED) == GC_MARKED)
@@ -953,12 +1009,14 @@ void ngc_thread(void* arg)
 
             *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr | biasToggle;
             printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, updateChk);
-            if (updateChk) Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
+            if (updateChk)
+            {
+                Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
+            }
 
             printf("[CLAMP] %s %d %p %p %p %p %p %p %d %d\n", __PRETTY_FUNCTION__, __LINE__, *oldAddr, newObj, oldAddr, newAddr, *oldAddr, *newAddr, oldBiased, newBiased);
         }
         printf("[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
-        Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
     }
     printf("[CLAMP] DONE COPYING\n");
     GC_COPY_PHASE = true;
@@ -1026,6 +1084,7 @@ HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
         sc.concurrent = FALSE;
         sc.stack_limit = 0;
         GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+        Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
         GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
         GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
 
@@ -1044,6 +1103,52 @@ size_t GCHeap::GarbageCollectTry(int generation, BOOL low_memory_p, int mode)
 {
     assert(!"Not Implemented Yet");
     return 0;
+}
+
+void* GCHeap::RequestObjectCopy(void* addr, bool isInterior)
+{
+    uintptr_t addrInt = (uintptr_t)addr;
+    if (VolatileLoad(&g_gc_copying_address) == 0 || addrInt < (uintptr_t)OLD_MEM || addrInt >= (uintptr_t)OLD_MEM + OLD_MEM_CURR)
+    {
+        return nullptr;
+    }
+
+    uint8_t** obj = (uint8_t**)addr;
+    if (isInterior)
+    {
+        obj = findObjectAddress(obj);
+    }
+
+    if ((uintptr_t)*obj < (uintptr_t)OLD_MEM || (uintptr_t)*obj >= (uintptr_t)OLD_MEM + OLD_MEM_CURR)
+    {
+        return nullptr;
+    }
+
+    uintptr_t temp = 0;
+    do
+    {
+        temp = Interlocked::CompareExchange(&g_gc_copying_address, (uintptr_t)obj, (uintptr_t)0xffffffff);
+        if (temp == 0) return nullptr;
+        YieldProcessor();
+    } while (temp != 0xffffffff);
+
+    while (VolatileLoad(&g_gc_copying_address) == (uintptr_t)obj)
+    {
+        YieldProcessor();
+    }
+    return obj;
+}
+
+void* GCHeap::UpdateInterioObject(void* objAddr, void* addr)
+{
+    uintptr_t addrInt = (uintptr_t)addr;
+
+    if (VolatileLoad(&g_gc_copying_address) == 0 || addrInt < (uintptr_t)OLD_MEM || addrInt >= (uintptr_t)OLD_MEM + OLD_MEM_CURR)
+    {
+        return addr;
+    }
+
+    return (void*)updateInteriorAddr((uint8_t**)addr, (uint8_t**)objAddr);
 }
 
 unsigned GCHeap::GetGcCount()

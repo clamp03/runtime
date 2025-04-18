@@ -401,7 +401,8 @@ enum CorInfoHelpFunc
     CORINFO_HELP_ARRADDR_ST,        // assign to element of object array with type-checking
     CORINFO_HELP_LDELEMA_REF,       // does a precise type comparison and returns address
 #ifdef FEATURE_NEW_GC
-    CORINFO_HELP_NGC_BARRIER,
+    CORINFO_HELP_NGC_OBJ_BARRIER,
+    CORINFO_HELP_NGC_ADDR_BARRIER,
 #endif // FEATURE_NEW_GC
 
     /* Exceptions */

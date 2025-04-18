@@ -1251,8 +1251,12 @@ HCIMPL2(Object*, JIT_Box, CORINFO_CLASS_HANDLE type, void* unboxedData)
 }
 HCIMPLEND
 
-HCIMPL1(VOID, JIT_NGC_Barrier, Object* obj)
+#ifdef FEATURE_NEW_GC
+HCIMPL1(VOID, JIT_NGC_Obj_Barrier, Object* obj)
 {
+    void* dummy = GCHeapUtilities::RequestObjectCopy((void*)obj, false);
+    printf("[CLAMP] %s %d %p => %p\n", __PRETTY_FUNCTION__, __LINE__, obj, dummy);
+#if 0
     uintptr_t objInt = (uintptr_t)obj;
     uintptr_t temp = 0;
     // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
@@ -1268,8 +1272,52 @@ HCIMPL1(VOID, JIT_NGC_Barrier, Object* obj)
         System_YieldProcessor();
     }
     // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
+#endif
 }
 HCIMPLEND
+
+HCIMPL1(TADDR, JIT_NGC_Addr_Barrier, TADDR addr)
+{
+    TADDR newAddr = addr;
+    void* objAddr = GCHeapUtilities::RequestObjectCopy((void*)addr, true);
+    if (objAddr)
+    {
+        newAddr = (TADDR) GCHeapUtilities::UpdateInterioObject(objAddr, (void*)addr);
+    }
+    if (newAddr != addr) printf("[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
+    return newAddr;
+#if 0
+    int marked = addr & 0x1;
+
+    uintptr_t addrInt = (uintptr_t)addr | 0x1;
+    uintptr_t temp = 0;
+    printf("[CLAMP] %s %d 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, addrInt);
+
+    do
+    {
+        temp = InterlockedCompareExchangeT(g_copying_address, addrInt, 0xffffffff);
+        if (temp == 0) return addr;
+        System_YieldProcessor();
+    } while (temp != 0xffffffff);
+
+    while ((temp = VolatileLoad(g_copying_address)) == addrInt)
+    {
+        System_YieldProcessor();
+    }
+    temp = InterlockedCompareExchangeT(g_copying_address, 0xffffffff, temp);
+    printf("[CLAMP] %s %d %p 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, addr, addrInt, temp);
+    if (temp == 0xffffffff || temp == 0)
+    {
+        return addr;
+    }
+    temp -= (1 - marked);
+
+    printf("[CLAMP] %s %d %p 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, addr, addrInt, temp);
+    return (TADDR)temp;
+#endif
+}
+HCIMPLEND
+#endif // FEATURE_NEW_GC
 
 /*************************************************************/
 HCIMPL2(BOOL, JIT_IsInstanceOfException, CORINFO_CLASS_HANDLE type, Object* obj)

@@ -7259,6 +7259,13 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                     optMethodFlags |= OMF_HAS_ARRAYREF;
                 }
 
+#ifdef FEATURE_NEW_GC
+#if 1
+                GenTreeCall* helperCall = gtNewHelperCallNode(CORINFO_HELP_NGC_OBJ_BARRIER, TYP_VOID, gtCloneExpr(op3));
+                impAppendTree(helperCall, CHECK_SPILL_ALL, impCurStmtDI);
+#endif
+#endif // FEATURE_NEW_GC
+
                 // Create the index address node.
                 op1 = gtNewArrayIndexAddr(op3, op1, lclTyp, stelemClsHnd);
                 op2 = impImplicitR4orR8Cast(op2, lclTyp);
@@ -8436,6 +8443,13 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                 }
 #endif
 
+#ifdef FEATURE_NEW_GC
+#if 1
+                op1 = gtNewHelperCallNode(CORINFO_HELP_NGC_ADDR_BARRIER, op1->gtType, op1);
+#endif
+                printf("[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+#endif // FEATURE_NEW_GC
+
                 op1 = gtNewStoreIndNode(lclTyp, op1, op2, impPrefixFlagsToIndirFlags(prefixFlags));
                 goto SPILL_APPEND;
 
@@ -8486,6 +8500,9 @@ void Compiler::impImportBlockCode(BasicBlock* block)
 
                 assertImp(genActualType(op1->gtType) == TYP_I_IMPL || op1->gtType == TYP_BYREF);
 
+#ifdef FEATURE_NEW_GC
+                op1 = gtNewHelperCallNode(CORINFO_HELP_NGC_ADDR_BARRIER, op1->gtType, op1);
+#endif // FEATURE_NEW_GC
                 op1 = gtNewIndir(lclTyp, op1, impPrefixFlagsToIndirFlags(prefixFlags));
                 impPushOnStack(op1, tiRetVal);
                 break;
@@ -9499,7 +9516,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
 #if 1
                 if (obj != nullptr)
                 {
-                    GenTreeCall* helperCall = gtNewHelperCallNode(CORINFO_HELP_NGC_BARRIER, TYP_VOID, gtCloneExpr(obj));
+                    GenTreeCall* helperCall = gtNewHelperCallNode(CORINFO_HELP_NGC_OBJ_BARRIER, TYP_VOID, gtCloneExpr(obj));
                     impAppendTree(helperCall, CHECK_SPILL_ALL, impCurStmtDI);
                 }
 #endif

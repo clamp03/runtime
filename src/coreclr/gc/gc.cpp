@@ -50693,6 +50693,9 @@ GCHeap::GarbageCollectTry (int generation, BOOL low_memory_p, int mode)
     return GarbageCollectGeneration (gen, reason);
 }
 
+void* GCHeap::RequestObjectCopy(void* addr, bool isInterior) {return nullptr;}
+void* GCHeap::UpdateInterioObject(void* objAddr, void* addr) { return nullptr; }
+
 #ifdef BACKGROUND_GC
 void gc_heap::add_bgc_pause_duration_0()
 {
