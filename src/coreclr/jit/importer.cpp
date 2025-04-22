@@ -8446,8 +8446,8 @@ void Compiler::impImportBlockCode(BasicBlock* block)
 #ifdef FEATURE_NEW_GC
 #if 1
                 op1 = gtNewHelperCallNode(CORINFO_HELP_NGC_ADDR_BARRIER, op1->gtType, op1);
-#endif
                 printf("[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+#endif
 #endif // FEATURE_NEW_GC
 
                 op1 = gtNewStoreIndNode(lclTyp, op1, op2, impPrefixFlagsToIndirFlags(prefixFlags));
@@ -8501,7 +8501,9 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                 assertImp(genActualType(op1->gtType) == TYP_I_IMPL || op1->gtType == TYP_BYREF);
 
 #ifdef FEATURE_NEW_GC
+#if 1
                 op1 = gtNewHelperCallNode(CORINFO_HELP_NGC_ADDR_BARRIER, op1->gtType, op1);
+#endif
 #endif // FEATURE_NEW_GC
                 op1 = gtNewIndir(lclTyp, op1, impPrefixFlagsToIndirFlags(prefixFlags));
                 impPushOnStack(op1, tiRetVal);

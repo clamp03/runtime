@@ -35,7 +35,7 @@ size_t  IND_SIZE = 4 * 1024;
 size_t* IND_DIFF = NULL;
 size_t  IND_CURR = 0;
 
-uintptr_t g_gc_copying_address = NULL;
+uintptr_t g_gc_copying_address = 0;
 
 size_t COUNTER = 0;
 
@@ -43,10 +43,6 @@ ssize_t MEM_DIFF = 0;
 
 bool IsInProgress = false;
 bool IsSuspensionPending = false;
-
-bool GC_MARK_PHASE = false;
-bool GC_COPY_PHASE = false;
-bool GC_RELOCATE_PHASE = false;
 
 #define SPECIAL_HEADER_BITS (0x3)
 
@@ -109,7 +105,7 @@ bool GCHeap::IsGCInProgressHelper(bool bConsiderGCStart)
 
 uint32_t GCHeap::WaitUntilGCComplete(bool bConsiderGCStart)
 {
-    assert(!"Not Implemented Yet");
+    // assert(!"Not Implemented Yet");
     return 0;
 }
 
@@ -798,7 +794,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
     printf("[CLAMP] %s %d ALLOC\n", __PRETTY_FUNCTION__, __LINE__);
     // Check indirection is working well after objects are moved.
-    GarbageCollect(0, 0, 0);
+    GarbageCollect(0, (flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0, (int)size);
 
     // assert(!"Not Implemented Yet");
     if ((flags & GC_ALLOC_ALIGN8) || (flags & GC_ALLOC_ALIGN8_BIAS))
@@ -893,7 +889,7 @@ uint8_t** findObjectAddress(uint8_t** addr)
         }
         else
         {
-            uintptr_t nextAddr = (uintptr_t)(OLD_MEM + (mid + 1 >= IND_CURR ? OLD_MEM_CURR : IND_DIFF[mid + 1]));
+            uintptr_t nextAddr = (uintptr_t)(OLD_MEM + IND_DIFF[mid + 1]);
             if (poAddr < nextAddr)
             {
                 printf("[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, midAddr, nextAddr);
@@ -929,172 +925,197 @@ uint8_t** findObjectAddress(uint8_t** addr)
     return nullptr;
 }
 
+void mark_phase()
+{
+    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
+    ScanContext sc;
+    sc.thread_number = 0;
+    sc.thread_count = 1;
+    sc.promotion = FALSE;
+    sc.concurrent = FALSE;
+    sc.stack_limit = 0;
+    GCScan::GcScanRoots(GCHeap::Mark, 0, 0, &sc);
+    GCScan::GcScanHandles(GCHeap::Mark, 0, 0, &sc);
+    /*
+       for (int i = 0; i < IND_CURR; i++)
+       {
+       Object* ind = *(Object**)(MEM + IND_DIFF[i]);
+       clear_marked(ind);
+       }
+       */
+    OLD_MEM = MEM;
+    OLD_MEM_CURR = MEM_CURR;
+
+    MEM_CURR = 0;
+    void* allocated = malloc(MEM_SIZE);
+    MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
+
+    // allocated = malloc(IND_SIZE);
+    // IND_DIFF = (size_t*)memset(allocated, 0, IND_SIZE);
+    IND_CURR = 0;
+
+    printf("[CLAMP] %s %d %p %d %p %d %p %d %p %d\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM, OLD_MEM_CURR, IND_DIFF, IND_CURR, MEM, MEM_CURR, IND_DIFF, IND_CURR);
+
+    Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
+    GCToEEInterface::RestartEE(TRUE);
+    printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
+}
+
+void relocate_phase()
+{
+    printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
+    ScanContext sc;
+    sc.thread_number = 0;
+    sc.thread_count = 1;
+    sc.promotion = FALSE;
+    sc.concurrent = FALSE;
+    sc.stack_limit = 0;
+    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
+    GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
+    GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
+
+    //OLD_MEM = (uint8_t*)memset(OLD_MEM, 0, MEM_SIZE);
+    free(OLD_MEM);
+    OLD_MEM = NULL;
+    OLD_MEM_CURR = 0;
+    GCToEEInterface::RestartEE(TRUE);
+    printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
+}
+
 void ngc_thread(void* arg)
 {
     printf("[CLAMP] RUN NGC THREAD\n");
-    if (!GC_COPY_PHASE)
+    size_t idx = 0;
+    size_t total = 0;
+    size_t live = 0;
+    while (idx < OLD_MEM_CURR)
     {
-        size_t idx = 0;
-        while (idx < OLD_MEM_CURR)
+        uint8_t** oldAddr = (uint8_t**)(OLD_MEM + idx);
+        size_t info = *((uintptr_t*)oldAddr + 1);
+        size_t size = info & ~0x3;
+        total ++;
+        if ((info & GC_MARKED) == GC_MARKED)
         {
-            uint8_t** oldAddr = (uint8_t**)(OLD_MEM + idx);
-            size_t info = *((uintptr_t*)oldAddr + 1);
-            size_t size = info & ~0x3;
-            if ((info & GC_MARKED) == GC_MARKED)
-            {
-                IND_DIFF[IND_CURR++] = idx;
-            }
-            idx += size;
+            IND_DIFF[IND_CURR++] = idx;
+            live += 1;
         }
-        printf("[CLAMP] BEFORE %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
-        int i = 0;
-        while (i < IND_CURR)
+        idx += size;
+    }
+    printf("[CLAMP] %s %d TOTAL %d LIVE %d\n", __PRETTY_FUNCTION__, __LINE__, total, live);
+    IND_DIFF[IND_CURR] = OLD_MEM_CURR;
+    printf("[CLAMP] BEFORE %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
+    int i = 0;
+    while (i < IND_CURR)
+    {
+        if ((i % 10) == 0) GCToOSInterface::Sleep(5);
+
+        bool updateChk = false;
+        uint8_t** oldAddr = (uint8_t**)VolatileLoad(&g_gc_copying_address);
+
+        if ((uintptr_t)oldAddr != 0xffffffff)
         {
-            if ((i % 10) == 0) GCToOSInterface::Sleep(5);
-
-            bool updateChk = false;
-            uint8_t** oldAddr = (uint8_t**)VolatileLoad(&g_gc_copying_address);
-
-            if ((uintptr_t)oldAddr != 0xffffffff)
+            if ((uintptr_t)*oldAddr >= (uintptr_t)OLD_MEM && (uintptr_t)*oldAddr < (uintptr_t)OLD_MEM + OLD_MEM_CURR)
             {
-                if ((uintptr_t)*oldAddr >= (uintptr_t)OLD_MEM && (uintptr_t)*oldAddr < (uintptr_t)OLD_MEM + OLD_MEM_CURR)
-                {
-                    updateChk = true;
-                }
-                else
-                {
-                    printf("[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-                    Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
-                }
+                updateChk = true;
             }
-
-            if (!updateChk)
+            else
             {
-                oldAddr = (uint8_t**)(OLD_MEM + IND_DIFF[i]);
-                i++;
-            }
-            printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr);
-            size_t info = *((uintptr_t*)oldAddr + 1);
-            size_t size = info & ~0x3;
-
-            printf("[CLAMP] %s %d 0x%x 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, i, size, OLD_MEM_CURR, updateChk, info);
-            if ((info & GC_MARKED) == 0)
-            {
-                printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, updateChk);
-                if (updateChk) Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
-                continue;
-            }
-
-            printf("[CLAMP] %s %d %p %p 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, size, updateChk);
-            assert(size < OLD_MEM_CURR);
-
-            bool oldBiased = (info & OBJ_BIASED) == OBJ_BIASED;
-            size_t offset = Interlocked::ExchangeAdd(&MEM_CURR, size);
-            assert(offset + size < MEM_SIZE);
-
-            uint8_t** newAddr = (uint8_t**)(MEM + offset);
-            bool newBiased = oldBiased;
-            uint8_t biasToggle = 0;
-            if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)newAddr & 0x7))
-            {
-                newBiased = !oldBiased;
-                biasToggle = OBJ_BIASED; // 1 for Increase and 2 for Decrease
-            }
-
-            uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
-            *newAddr = newObj;
-
-            memcpy(newAddr + 1 + 1 + (newBiased ? 1 : 0), oldAddr + 1 + 1 + (oldBiased ? 1 : 0), size - 4 - 4);
-            *oldAddr = newObj;
-
-            *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr | biasToggle;
-            printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, updateChk);
-            if (updateChk)
-            {
+                printf("[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
                 Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
             }
-
-            printf("[CLAMP] %s %d %p %p %p %p %p %p %d %d\n", __PRETTY_FUNCTION__, __LINE__, *oldAddr, newObj, oldAddr, newAddr, *oldAddr, *newAddr, oldBiased, newBiased);
         }
-        printf("[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
+
+        if (!updateChk)
+        {
+            oldAddr = (uint8_t**)(OLD_MEM + IND_DIFF[i]);
+            i++;
+        }
+        printf("[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr);
+        size_t info = *((uintptr_t*)oldAddr + 1);
+        size_t size = info & ~0x3;
+
+        printf("[CLAMP] %s %d 0x%x 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, i, size, OLD_MEM_CURR, updateChk, info);
+        if ((info & GC_MARKED) == 0)
+        {
+            printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, updateChk);
+            if (updateChk) Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
+            continue;
+        }
+
+        printf("[CLAMP] %s %d %p %p 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, size, updateChk);
+        assert(size < OLD_MEM_CURR);
+
+        bool oldBiased = (info & OBJ_BIASED) == OBJ_BIASED;
+        size_t offset = Interlocked::ExchangeAdd(&MEM_CURR, size);
+        assert(offset + size < MEM_SIZE);
+
+        uint8_t** newAddr = (uint8_t**)(MEM + offset);
+        bool newBiased = oldBiased;
+        uint8_t biasToggle = 0;
+        if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)newAddr & 0x7))
+        {
+            newBiased = !oldBiased;
+            biasToggle = OBJ_BIASED; // 1 for Increase and 2 for Decrease
+        }
+
+        uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
+        *newAddr = newObj;
+
+        memcpy(newObj - 4, *oldAddr - 4, size - 4 - 4);
+        *oldAddr = newObj;
+
+        *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr | biasToggle;
+        printf("[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, updateChk);
+        if (updateChk)
+        {
+            Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
+        }
+
+        printf("[CLAMP] %s %d %p %p %p %p %p %p %d %d\n", __PRETTY_FUNCTION__, __LINE__, *oldAddr, newObj, oldAddr, newAddr, *oldAddr, *newAddr, oldBiased, newBiased);
     }
+    printf("[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
     printf("[CLAMP] DONE COPYING\n");
-    GC_COPY_PHASE = true;
+    relocate_phase();
 }
 
-HRESULT GCHeap::GarbageCollect(int generation, bool low_memory_p, int mode)
+HRESULT GCHeap::GarbageCollect(int generation, bool isPinned, int size)
 {
+#if 1
+    if (isPinned)
+    {
+        if (PINNED_MEM_CURR == 0 || PINNED_MEM_CURR + size < PINNED_MEM_SIZE)
+        {
+            return S_OK;
+        }
+    }
+    else
+    {
+        if (MEM_CURR == 0 || MEM_CURR + size < MEM_SIZE)
+        {
+            return S_OK;
+        }
+    }
+#endif
 
     COUNTER += 1;
     if (COUNTER % 50 == 0)
     {
         printf("[CLAMP] COUNT %d\n", COUNTER);
     }
-    if (!GC_COPY_PHASE && (COUNTER == 0 || COUNTER % 200 != 0))
+#if 0
+    if ((COUNTER == 0 || COUNTER % 200 != 0))
     {
         return S_OK;
     }
-    if (!GC_MARK_PHASE)
+#endif
+    if (VolatileLoad(&g_gc_copying_address) != 0)
     {
-        printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
-        ScanContext sc;
-        sc.thread_number = 0;
-        sc.thread_count = 1;
-        sc.promotion = FALSE;
-        sc.concurrent = FALSE;
-        sc.stack_limit = 0;
-        GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
-        GCScan::GcScanRoots(GCHeap::Mark, 0, 0, &sc);
-        GCScan::GcScanHandles(GCHeap::Mark, 0, 0, &sc);
-        /*
-        for (int i = 0; i < IND_CURR; i++)
-        {
-            Object* ind = *(Object**)(MEM + IND_DIFF[i]);
-            clear_marked(ind);
-        }
-        */
-        OLD_MEM = MEM;
-        OLD_MEM_CURR = MEM_CURR;
-
-        MEM_CURR = 0;
-        void* allocated = malloc(MEM_SIZE);
-        MEM = (uint8_t*)memset(allocated, 0, MEM_SIZE);
-
-        // allocated = malloc(IND_SIZE);
-        // IND_DIFF = (size_t*)memset(allocated, 0, IND_SIZE);
-        IND_CURR = 0;
-
-        printf("[CLAMP] %s %d %p %d %p %d %p %d %p %d\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM, OLD_MEM_CURR, IND_DIFF, IND_CURR, MEM, MEM_CURR, IND_DIFF, IND_CURR);
-
-        Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
-        GCToEEInterface::RestartEE(TRUE);
-        printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
-        GCToEEInterface::CreateThread(ngc_thread, NULL, false, ".NET NGC");
-        GC_MARK_PHASE = true;
+        return S_OK;
     }
-    else if(GC_COPY_PHASE && !GC_RELOCATE_PHASE)
-    {
-        GC_RELOCATE_PHASE = true;
-
-        printf("[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
-        ScanContext sc;
-        sc.thread_number = 0;
-        sc.thread_count = 1;
-        sc.promotion = FALSE;
-        sc.concurrent = FALSE;
-        sc.stack_limit = 0;
-        GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
-        Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
-        GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
-        GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
-
-        //OLD_MEM = (uint8_t*)memset(OLD_MEM, 0, MEM_SIZE);
-        free(OLD_MEM);
-        OLD_MEM = NULL;
-        OLD_MEM_CURR = 0;
-        GCToEEInterface::RestartEE(TRUE);
-        printf("[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
-    }
+    mark_phase();
+    GCToEEInterface::CreateThread(ngc_thread, NULL, false, ".NET NGC");
 
     return S_OK;
 }
