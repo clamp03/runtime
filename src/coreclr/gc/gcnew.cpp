@@ -48,7 +48,7 @@ public:
     }
 };
 
-size_t   MEM_SIZE = 1024 * 64;
+size_t   MEM_SIZE = 1024 * 32;
 heap_region* MEM = NULL;
 heap_region* OLD_MEM = NULL;
 
@@ -252,8 +252,8 @@ HRESULT GCHeap::Initialize()
         void* allocated = malloc(MEM_SIZE + 16);
         void* pinned_allocated = malloc(PINNED_MEM_SIZE + 16);
 
-        MEM = (heap_region*)allocated;
-        PINNED_MEM = (heap_region*)pinned_allocated;
+        MEM = (heap_region*)memset(allocated, 0, MEM_SIZE + 16);
+        PINNED_MEM = (heap_region*)memset(pinned_allocated, 0, PINNED_MEM_SIZE + 16);
 
         MEM->size = MEM_SIZE;
         PINNED_MEM->size = PINNED_MEM_SIZE;
@@ -930,28 +930,31 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     else
     {
         // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
-        size_t offset = Interlocked::ExchangeAdd(&MEM->curr, size);
-        if (offset + size >= MEM->size)
+        heap_region* mem = MEM;
+        size_t offset = Interlocked::ExchangeAdd(&mem->curr, size);
+        if (offset + size >= mem->size)
         {
-            fprintf(stderr, "[CLAMP] %s %d OVER %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, offset, size, MEM->size);
+            mem->curr -= size;
+            fprintf(stderr, "[CLAMP] %s %d OVER %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, offset, size, mem->size);
             // TODO NEED TO LOCK. => I WILL CHANGE IT TO CALL GC. IN STW, IT WILL INCREASE MEM SO I THINK IT DOESN'T NEED TO LOCK
             size_t allocSize = size > MEM_SIZE ? size : MEM_SIZE;
-            void* allocated = malloc(size + 16);
-            heap_region* newMem = (heap_region*)memset(allocated, 0, size + 16);
+            void* allocated = malloc(allocSize + 16);
+            heap_region* newMem = (heap_region*)memset(allocated, 0, allocSize + 16);
             newMem->curr = 0;
             newMem->size = allocSize;
-            newMem->next = MEM;
+            newMem->next = mem;
 
             MEM = newMem;
             fprintf(stderr, "[CLAMP] %s %d LINK 0x%x %p %zu %zu\n", __PRETTY_FUNCTION__, __LINE__, offset, MEM->getAddr(), size, allocSize);
             offset = Interlocked::ExchangeAdd(&MEM->curr , size);
+            mem = MEM;
 #if 0
             GarbageCollect(0, (flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0, (int)size);
             offset = Interlocked::ExchangeAdd((size_t*)MEM - 1, size);
 #endif
         }
 
-        uint8_t* ret = (uint8_t*)MEM->getAddr(offset);
+        uint8_t* ret = (uint8_t*)mem->getAddr(offset);
         uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4 + 4); // ObjHeader + m_pObj pointer + next pointer
         uint8_t bias = 0;
         if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
