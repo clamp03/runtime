@@ -1279,12 +1279,14 @@ HCIMPLEND
 HCIMPL1(TADDR, JIT_NGC_Addr_Barrier, TADDR addr)
 {
     TADDR newAddr = addr;
+    fprintf(stderr, "[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr);
     void* objAddr = GCHeapUtilities::RequestObjectCopy((void*)addr, true);
+    fprintf(stderr, "[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
     if (objAddr)
     {
         newAddr = (TADDR) GCHeapUtilities::UpdateInterioObject(objAddr, (void*)addr);
     }
-    if (newAddr != addr) printf("[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
+    /*if (newAddr != addr)*/ fprintf(stderr, "[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
     return newAddr;
 #if 0
     int marked = addr & 0x1;
