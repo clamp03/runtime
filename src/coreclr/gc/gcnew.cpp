@@ -677,7 +677,7 @@ void mark_object_simple(uint8_t** po)
                 if (oo != nullptr && !marked(oo))
                 {
                     set_marked(oo);
-                    if (MEM->isInHeapRegion((void*)oo))
+                    if (OLD_MEM->isInHeapRegion((void*)oo))
                     {
                         *((uintptr_t*)oo + 1) |= GC_MARKED;
                     }
@@ -692,6 +692,62 @@ void mark_object_simple(uint8_t** po)
     );
 }
 
+uint8_t** findObjectAddress(uint8_t** addr)
+{
+    size_t start = 0;
+    size_t end = IND_CURR;
+    size_t poAddr = (size_t)addr;
+    while (start < end)
+    {
+        size_t mid = (start + end) / 2;
+
+        uint8_t** midAddr = (uint8_t**)OLD_MEM->getAddr(IND_DIFF[mid]);
+        fprintf(stderr, "[CLAMP] %s %d %p %p %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, mid, start, end);
+        if ((uintptr_t)midAddr > (uintptr_t)poAddr)
+        {
+            end = mid;
+        }
+        else
+        {
+            uintptr_t nextAddr = (uintptr_t)(OLD_MEM->getAddr(IND_DIFF[mid + 1]));
+            fprintf(stderr, "[CLAMP] %s %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, (void*)nextAddr);
+            if (poAddr < nextAddr)
+            {
+                fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, midAddr, nextAddr);
+                return midAddr;
+#if 0
+                if ((uintptr_t)*midAddr >= (uintptr_t)OLD_MEM && (uintptr_t)*midAddr < (uintptr_t)OLD_MEM + OLD_MEM_CURR)
+                {
+                    return midAddr;
+                }
+                else
+                {
+                    uintptr_t addrInfo = *((uintptr_t*)midAddr + 1);
+                    uintptr_t newAddr = (uintptr_t)(addrInfo & ~0x3);
+                    assert((addrInfo & GC_MARKED) == 0);
+                    uintptr_t newRefAddr = (uintptr_t)updateInteriorAddr(addr, midAddr, (uint8_t**)newAddr);
+                    Interlocked::Exchange(&g_gc_copying_address, newRefAddr);
+                    fprintf(stderr, "[CLAMP] %s %d %p 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, midAddr, newAddr, newRefAddr);
+                    while (g_gc_copying_address != 0xffffffff)
+                    {
+                        YieldProcessor();
+                    }
+                    return nullptr;
+                }
+#endif
+            }
+            else
+            {
+                start = mid + 1;
+            }
+        }
+    }
+
+    fprintf(stderr, "[CLAMP] %s %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, addr, OLD_MEM, OLD_MEM->getCurrAddr());
+    assert(!"Cannot find object");
+    return nullptr;
+}
+
 void GCHeap::Mark(Object** ppObject, ScanContext* sc, uint32_t flags)
 {
     uint8_t* po = (uint8_t*)*ppObject;
@@ -703,11 +759,19 @@ void GCHeap::Mark(Object** ppObject, ScanContext* sc, uint32_t flags)
     if (flags & GC_CALL_INTERIOR)
     {
         // TODO Something later
-        fprintf(stderr, "[CLAMP] %s %d MARK INTERIOR %p %p\n", __PRETTY_FUNCTION__, __LINE__, ppObject, po);
-        return;
+        fprintf(stderr, "[CLAMP] %s %d MARK INTERIOR %p %p %d\n", __PRETTY_FUNCTION__, __LINE__, ppObject, po, OLD_MEM->isInHeapRegion((void*)po));
+        if (OLD_MEM->isInHeapRegion(po))
+        {
+            po = (uint8_t*)findObjectAddress((uint8_t**)po);
+            ppObject = (Object**)&po;
+        }
+        else
+        {
+            return;
+        }
     }
 
-    if (MEM->isInHeapRegion((void*)po))
+    if (OLD_MEM->isInHeapRegion((void*)po))
     {
         *((uintptr_t*)po + 1) |= GC_MARKED;
     }
@@ -767,62 +831,6 @@ uint8_t** updateInteriorAddr(uint8_t** intAddr, uint8_t** oldAddr)
     return (uint8_t**)((uintptr_t)newAddr + offset);
 }
 
-uint8_t** findObjectAddress(uint8_t** addr)
-{
-    size_t start = 0;
-    size_t end = IND_CURR;
-    size_t poAddr = (size_t)addr;
-    while (start < end)
-    {
-        size_t mid = (start + end) / 2;
-
-        uint8_t** midAddr = (uint8_t**)OLD_MEM->getAddr(IND_DIFF[mid]);
-        fprintf(stderr, "[CLAMP] %s %d %p %p %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, mid, start, end);
-        if ((uintptr_t)midAddr > (uintptr_t)poAddr)
-        {
-            end = mid;
-        }
-        else
-        {
-            uintptr_t nextAddr = (uintptr_t)(OLD_MEM->getAddr(IND_DIFF[mid + 1]));
-            fprintf(stderr, "[CLAMP] %s %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, (void*)nextAddr);
-            if (poAddr < nextAddr)
-            {
-                fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, midAddr, nextAddr);
-                return midAddr;
-#if 0
-                if ((uintptr_t)*midAddr >= (uintptr_t)OLD_MEM && (uintptr_t)*midAddr < (uintptr_t)OLD_MEM + OLD_MEM_CURR)
-                {
-                    return midAddr;
-                }
-                else
-                {
-                    uintptr_t addrInfo = *((uintptr_t*)midAddr + 1);
-                    uintptr_t newAddr = (uintptr_t)(addrInfo & ~0x3);
-                    assert((addrInfo & GC_MARKED) == 0);
-                    uintptr_t newRefAddr = (uintptr_t)updateInteriorAddr(addr, midAddr, (uint8_t**)newAddr);
-                    Interlocked::Exchange(&g_gc_copying_address, newRefAddr);
-                    fprintf(stderr, "[CLAMP] %s %d %p 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, midAddr, newAddr, newRefAddr);
-                    while (g_gc_copying_address != 0xffffffff)
-                    {
-                        YieldProcessor();
-                    }
-                    return nullptr;
-                }
-#endif
-            }
-            else
-            {
-                start = mid + 1;
-            }
-        }
-    }
-
-    fprintf(stderr, "[CLAMP] %s %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, addr, OLD_MEM, OLD_MEM->getCurrAddr());
-    assert(!"Cannot find object");
-    return nullptr;
-}
-
 
 void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
         uint32_t flags)
@@ -845,7 +853,6 @@ void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
 
         fprintf(stderr, "[CLAMP] GC CALL INTERIOR NOW GO!!! %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         uint8_t** obj = findObjectAddress(po);
-        assert(obj);
         *ppObject = (Object*)updateInteriorAddr(po, obj);
         return;
     }
@@ -980,23 +987,8 @@ void mark_phase()
 {
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
     fprintf(stderr, "[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
-    ScanContext sc;
-    sc.thread_number = 0;
-    sc.thread_count = 1;
-    sc.promotion = FALSE;
-    sc.concurrent = FALSE;
-    sc.stack_limit = 0;
-    GCScan::GcScanRoots(GCHeap::Mark, 0, 0, &sc);
-    GCScan::GcScanHandles(GCHeap::Mark, 0, 0, &sc);
-    /*
-       for (int i = 0; i < IND_CURR; i++)
-       {
-       Object* ind = *(Object**)(MEM + IND_DIFF[i]);
-       clear_marked(ind);
-       }
-    */
+
     OLD_MEM = MEM;
-    // CURR(OLD_MEM) = CURR(MEM);
 
     void* allocated = malloc(MEM_SIZE + 16);
     MEM = (heap_region*)memset(allocated, 0, MEM_SIZE + 16);
@@ -1006,7 +998,28 @@ void mark_phase()
     OLD_MEM->next = nullptr;
     assert((uint8_t*)allocated + 16 == (uint8_t*)MEM->getAddr());
 
-    fprintf(stderr, "[CLAMP] %s %d mark_phase %p %p\n", __PRETTY_FUNCTION__, __LINE__, MEM->getAddr(), OLD_MEM->getAddr());
+    ScanContext sc;
+    sc.thread_number = 0;
+    sc.thread_count = 1;
+    sc.promotion = FALSE;
+    sc.concurrent = FALSE;
+    sc.stack_limit = 0;
+
+    size_t idx = 0;
+    while (idx < OLD_MEM->curr)
+    {
+        uint8_t** oldAddr = (uint8_t**)(OLD_MEM->getAddr(idx));
+        size_t info = *((uintptr_t*)oldAddr + 1);
+        size_t size = info & ~0x3;
+        IND_DIFF[IND_CURR++] = idx;
+        idx += size;
+    }
+    IND_DIFF[IND_CURR] = OLD_MEM->curr;
+
+    GCScan::GcScanRoots(GCHeap::Mark, 0, 0, &sc);
+    GCScan::GcScanHandles(GCHeap::Mark, 0, 0, &sc);
+
+    fprintf(stderr, "[CLAMP] %s %d mark_phase %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, MEM->getAddr(), OLD_MEM->getAddr(), OLD_MEM->getEndAddr());
 
     //*(uintptr_t*)(MEM - 8) = *(uintptr_t*)(OLD_MEM - 8);
     //*(uintptr_t*)(OLD_MEM - 8) = 0;
