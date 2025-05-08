@@ -61,7 +61,7 @@ size_t  IND_CURR = 0;
 
 uintptr_t g_gc_copying_address = 0;
 
-size_t COUNTER = 0;
+//size_t COUNTER = 0;
 
 ssize_t MEM_DIFF = 0;
 
@@ -901,7 +901,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         size += 4;
     }
 
-    GarbageCollect(0, (flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0, (int)size);
+    // GarbageCollect(0, (flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0, (int)size);
     if (flags & GC_ALLOC_PINNED_OBJECT_HEAP)
     {
         // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
@@ -930,31 +930,44 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     else
     {
         // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
-        heap_region* mem = MEM;
-        size_t offset = Interlocked::ExchangeAdd(&mem->curr, size);
-        if (offset + size >= mem->size)
+        size_t offset;
+        while (true)
         {
-            mem->curr -= size;
-            fprintf(stderr, "[CLAMP] %s %d OVER %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, offset, size, mem->size);
-            // TODO NEED TO LOCK. => I WILL CHANGE IT TO CALL GC. IN STW, IT WILL INCREASE MEM SO I THINK IT DOESN'T NEED TO LOCK
-            size_t allocSize = size > MEM_SIZE ? size : MEM_SIZE;
-            void* allocated = malloc(allocSize + 16);
-            heap_region* newMem = (heap_region*)memset(allocated, 0, allocSize + 16);
-            newMem->curr = 0;
-            newMem->size = allocSize;
-            newMem->next = mem;
+            heap_region* mem = MEM;
+            offset = Interlocked::ExchangeAdd(&mem->curr, size);
+            if (offset + size >= mem->size)
+            {
+                fprintf(stderr, "[CLAMP] %s %d 0x%x 0x%x %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, offset, size, mem, mem->curr);
+                Interlocked::ExchangeAdd(&mem->curr, -size);
+                GarbageCollect(0, false, (int)size);
+                /*
+                mem->curr -= size;
+                fprintf(stderr, "[CLAMP] %s %d OVER %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, offset, size, mem->size);
+                // TODO NEED TO LOCK. => I WILL CHANGE IT TO CALL GC. IN STW, IT WILL INCREASE MEM SO I THINK IT DOESN'T NEED TO LOCK
+                size_t allocSize = size > MEM_SIZE ? size : MEM_SIZE;
+                void* allocated = malloc(allocSize + 16);
+                heap_region* newMem = (heap_region*)memset(allocated, 0, allocSize + 16);
+                newMem->curr = 0;
+                newMem->size = allocSize;
+                newMem->next = mem;
 
-            MEM = newMem;
-            fprintf(stderr, "[CLAMP] %s %d LINK 0x%x %p %zu %zu\n", __PRETTY_FUNCTION__, __LINE__, offset, MEM->getAddr(), size, allocSize);
-            offset = Interlocked::ExchangeAdd(&MEM->curr , size);
-            mem = MEM;
+                MEM = newMem;
+                fprintf(stderr, "[CLAMP] %s %d LINK 0x%x %p %zu %zu\n", __PRETTY_FUNCTION__, __LINE__, offset, MEM->getAddr(), size, allocSize);
+                offset = Interlocked::ExchangeAdd(&MEM->curr , size);
+                mem = MEM;
 #if 0
-            GarbageCollect(0, (flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0, (int)size);
-            offset = Interlocked::ExchangeAdd((size_t*)MEM - 1, size);
+GarbageCollect(0, (flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0, (int)size);
+offset = Interlocked::ExchangeAdd((size_t*)MEM - 1, size);
 #endif
+*/
+            }
+            else
+            {
+                break;
+            }
         }
 
-        uint8_t* ret = (uint8_t*)mem->getAddr(offset);
+        uint8_t* ret = (uint8_t*)MEM->getAddr(offset);
         uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4 + 4); // ObjHeader + m_pObj pointer + next pointer
         uint8_t bias = 0;
         if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
@@ -986,16 +999,17 @@ Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
     return NULL;
 }
 
-void mark_phase()
+void mark_phase(int alloc)
 {
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
-    fprintf(stderr, "[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
+    fprintf(stderr, "[CLAMP] %s %d START %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, MEM, OLD_MEM, alloc);
 
     OLD_MEM = MEM;
 
-    void* allocated = malloc(MEM_SIZE + 16);
-    MEM = (heap_region*)memset(allocated, 0, MEM_SIZE + 16);
-    MEM->size = MEM_SIZE;
+    int allocSize = alloc + MEM_SIZE;
+    void* allocated = malloc(allocSize + 16);
+    MEM = (heap_region*)memset(allocated, 0, allocSize + 16);
+    MEM->size = allocSize;
     MEM->curr = 0;
     MEM->next = OLD_MEM->next;
     OLD_MEM->next = nullptr;
@@ -1009,11 +1023,13 @@ void mark_phase()
     sc.stack_limit = 0;
 
     size_t idx = 0;
+    IND_CURR = 0;
     while (idx < OLD_MEM->curr)
     {
         uint8_t** oldAddr = (uint8_t**)(OLD_MEM->getAddr(idx));
         size_t info = *((uintptr_t*)oldAddr + 1);
         size_t size = info & ~0x3;
+        fprintf(stderr, "[CLAMP] %s %d %p 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, info, size);
         IND_DIFF[IND_CURR++] = idx;
         idx += size;
     }
@@ -1065,8 +1081,8 @@ void relocate_phase()
         *((uintptr_t*)MEM - 1) = (uintptr_t)memset(allocated, 0, MEM_SIZE + 4);
     }
 #endif
-    GCToEEInterface::RestartEE(TRUE);
     fprintf(stderr, "[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
+    GCToEEInterface::RestartEE(TRUE);
 }
 
 void copying_phase(heap_region* mem)
@@ -1174,12 +1190,13 @@ void ngc_thread(void* arg)
 
 HRESULT GCHeap::GarbageCollect(int generation, bool isPinned, int size)
 {
+
+#if 0
     COUNTER += 1;
-    if (COUNTER % 50 == 0)
+    if (COUNTER % 500 == 0)
     {
         fprintf(stderr, "[CLAMP] COUNT %d\n", COUNTER);
     }
-#if 1
     if (COUNTER == 0 || COUNTER % 100 != 0 /*|| OnlyOnce*/)
     {
         return S_OK;
@@ -1187,10 +1204,17 @@ HRESULT GCHeap::GarbageCollect(int generation, bool isPinned, int size)
 #endif
     if (VolatileLoad(&g_gc_copying_address) != 0)
     {
+        bool bToggleGC = GCToEEInterface::EnablePreemptiveGC();
+        YieldProcessor();
+        fprintf(stderr, "[CLAMP] NOW GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+        if (bToggleGC)
+        {
+            GCToEEInterface::DisablePreemptiveGC();
+        }
         return S_OK;
     }
     OnlyOnce = TRUE;
-    mark_phase();
+    mark_phase(size);
     GCToEEInterface::CreateThread(ngc_thread, NULL, false, ".NET NGC");
 
     return S_OK;
