@@ -7948,7 +7948,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
         {
             newGCReg = codeGen->internalRegisters.GetSingle(indir);
             emitIns_R_R(INS_ldr, EA_PTRSIZE, newGCReg, memBase->GetRegNum()); // FEATURE_NEW_GC
-            emitIns(INS_nop);
+            // emitIns(INS_nop); // CLAMP
         }
 
         if (indir->HasIndex())
@@ -8072,7 +8072,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
             if (!addr->IsIconHandle() && addr->TypeGet() == TYP_REF)
             {
                 emitIns_R_R(INS_ldr, EA_PTRSIZE, dataReg, addr->GetRegNum()); // FEATURE_NEW_GC
-                emitIns(INS_nop);
+                // emitIns(INS_nop); // CLAMP
                 emitIns_R_R_I(ins, attr, dataReg, dataReg, offset);
             }
             else
@@ -8085,7 +8085,7 @@ void emitter::emitInsLoadStoreOp(instruction ins, emitAttr attr, regNumber dataR
             if (!addr->IsIconHandle() && addr->TypeGet() == TYP_REF)
             {
                 emitIns_R_R(INS_ldr, EA_PTRSIZE, dataReg, addr->GetRegNum()); // FEATURE_NEW_GC
-                emitIns(INS_nop);
+                // emitIns(INS_nop); // CLAMP
                 emitIns_R_R(ins, attr, dataReg, dataReg);
             }
             else
@@ -8150,7 +8150,7 @@ regNumber emitter::emitInsTernary(instruction ins, emitAttr attr, GenTree* dst, 
         if (dst->TypeGet() == TYP_BYREF && src1->TypeGet() == TYP_REF)
         {
             emitIns_R_R(INS_ldr, EA_PTRSIZE, src1->GetRegNum(), src1->GetRegNum()); // FEATURE_NEW_GC
-            emitIns(INS_nop);
+            // emitIns(INS_nop); // CLAMP
         }
         // src2 can be immed or reg
         assert(!src2->isContained() || src2->isContainedIntOrIImmed());

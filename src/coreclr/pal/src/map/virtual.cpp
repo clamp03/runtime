@@ -618,6 +618,7 @@ static LPVOID ReserveVirtualMemory(
                           mmapFlags,
                           -1 /* fd */,
                           0  /* offset */);
+    //fprintf(stderr, "[CLAMP] %s %d 0x%x 0x%x 0x%x 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, mmapFlags, MAP_ANON, fAllocationType, (int)dwSize, pRetVal);
 
     if (pRetVal == MAP_FAILED)
     {
@@ -735,6 +736,7 @@ VIRTUALCommitMemory(
 
     nProtect = W32toUnixAccessControl(flProtect);
 
+    //fprintf(stderr, "[CLAMP] %s %d %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, (void*)StartBoundary, (int)MemSize);
     // Commit the pages
     if (mprotect((void *) StartBoundary, MemSize, nProtect) != 0)
     {
@@ -1062,6 +1064,7 @@ VirtualFree(
         // Explicitly calling mmap instead of mprotect here makes it
         // that much more clear to the operating system that we no
         // longer need these pages.
+        //fprintf(stderr, "[CLAMP] %s %d %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, (LPVOID)StartBoundary, (int)MemSize);
         if ( mmap( (LPVOID)StartBoundary, MemSize, PROT_NONE,
                    MAP_FIXED | MAP_ANON | MAP_PRIVATE, -1, 0 ) != MAP_FAILED )
         {
@@ -1114,6 +1117,7 @@ VirtualFree(
         TRACE( "Releasing the following memory %d to %d.\n",
                pMemoryToBeReleased->startBoundary, pMemoryToBeReleased->memSize );
 
+        //fprintf(stderr, "[CLAMP] %s %d munmap %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, (LPVOID)pMemoryToBeReleased->startBoundary, (int)pMemoryToBeReleased->memSize);
         if ( munmap( (LPVOID)pMemoryToBeReleased->startBoundary,
                      pMemoryToBeReleased->memSize ) == 0 )
         {

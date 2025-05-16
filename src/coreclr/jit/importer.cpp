@@ -8446,7 +8446,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
 #ifdef FEATURE_NEW_GC
 #if 1
                 op1 = gtNewHelperCallNode(CORINFO_HELP_NGC_ADDR_BARRIER, op1->gtType, op1);
-                printf("[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+                // printf("[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
 #endif
 #endif // FEATURE_NEW_GC
 

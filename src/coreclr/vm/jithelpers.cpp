@@ -1255,11 +1255,11 @@ HCIMPLEND
 HCIMPL1(VOID, JIT_NGC_Obj_Barrier, Object* obj)
 {
     void* dummy = GCHeapUtilities::RequestObjectCopy((void*)obj, false);
-    printf("[CLAMP] %s %d %p => %p\n", __PRETTY_FUNCTION__, __LINE__, obj, dummy);
+    //printf("[CLAMP] %s %d %p => %p\n", __PRETTY_FUNCTION__, __LINE__, obj, dummy);
 #if 0
     uintptr_t objInt = (uintptr_t)obj;
     uintptr_t temp = 0;
-    // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
+    // // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
     do
     {
         temp = InterlockedCompareExchangeT(g_copying_address, objInt, 0xffffffff);
@@ -1271,7 +1271,7 @@ HCIMPL1(VOID, JIT_NGC_Obj_Barrier, Object* obj)
     {
         System_YieldProcessor();
     }
-    // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
+    // // printf("[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, obj);
 #endif
 }
 HCIMPLEND
@@ -1279,21 +1279,23 @@ HCIMPLEND
 HCIMPL1(TADDR, JIT_NGC_Addr_Barrier, TADDR addr)
 {
     TADDR newAddr = addr;
-    fprintf(stderr, "[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr);
+    // fprintf(stderr, "[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr);
     void* objAddr = GCHeapUtilities::RequestObjectCopy((void*)addr, true);
-    fprintf(stderr, "[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
+    // fprintf(stderr, "[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
     if (objAddr)
     {
         newAddr = (TADDR) GCHeapUtilities::UpdateInterioObject(objAddr, (void*)addr);
     }
-    /*if (newAddr != addr)*/ fprintf(stderr, "[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
+    /*if (newAddr != addr)*/ // fprintf(stderr, "[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
+    //fprintf(stderr, "[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
+    //printf("[CLAMP] %s %d 0x%x => 0x%x in %p\n", __PRETTY_FUNCTION__, __LINE__, addr, newAddr, objAddr);
     return newAddr;
 #if 0
     int marked = addr & 0x1;
 
     uintptr_t addrInt = (uintptr_t)addr | 0x1;
     uintptr_t temp = 0;
-    printf("[CLAMP] %s %d 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, addrInt);
+    // printf("[CLAMP] %s %d 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, addrInt);
 
     do
     {
@@ -1307,14 +1309,14 @@ HCIMPL1(TADDR, JIT_NGC_Addr_Barrier, TADDR addr)
         System_YieldProcessor();
     }
     temp = InterlockedCompareExchangeT(g_copying_address, 0xffffffff, temp);
-    printf("[CLAMP] %s %d %p 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, addr, addrInt, temp);
+    // printf("[CLAMP] %s %d %p 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, addr, addrInt, temp);
     if (temp == 0xffffffff || temp == 0)
     {
         return addr;
     }
     temp -= (1 - marked);
 
-    printf("[CLAMP] %s %d %p 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, addr, addrInt, temp);
+    // printf("[CLAMP] %s %d %p 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, g_copying_address, *g_copying_address, addr, addrInt, temp);
     return (TADDR)temp;
 #endif
 }

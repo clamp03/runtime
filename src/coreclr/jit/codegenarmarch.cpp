@@ -1716,7 +1716,7 @@ void CodeGen::genCodeForIndexAddr(GenTreeIndexAddr* node)
     if (base->TypeGet() == TYP_REF) // FEATURE_NEW_GC. AFTER THIS FRAGILE ADDRESS IS SAVED TO node->GetRegNum()
     {
         GetEmitter()->emitIns_R_R(INS_ldr, EA_PTRSIZE, tmpBaseReg, base->GetRegNum());
-        GetEmitter()->emitIns(INS_nop);
+        // GetEmitter()->emitIns(INS_nop); // CLAMP
         assert(tmpBaseReg != indexReg);
     }
     else
@@ -3053,7 +3053,7 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* node)
     if (dstAddr->TypeGet() == TYP_REF || (dstAddr->OperIsAddrMode() && dstAddr->AsAddrMode()->HasBase() && dstAddr->AsAddrMode()->Base()->TypeGet() == TYP_REF)) // FEATURE_NEW_GC
     {
         emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, newGcReg, dstAddrBaseReg);
-        emit->emitIns(INS_nop);
+        // emit->emitIns(INS_nop); // CLAMP
     }
     else
     {
@@ -4426,7 +4426,7 @@ void CodeGen::genLeaInstruction(GenTreeAddrMode* lea)
     if (lea->HasBase() && lea->Base()->TypeGet() == TYP_REF) // FEATURE_NEW_GC
     {
         emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, lea->Base()->GetRegNum(), lea->Base()->GetRegNum()); // FEATURE_NEW_GC
-        emit->emitIns(INS_nop);
+        // emit->emitIns(INS_nop); // CLAMP
     }
 
     if (lea->HasBase() && lea->HasIndex())

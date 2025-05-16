@@ -1382,10 +1382,12 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
 
         regNumber dataReg = data->GetRegNum();
         GenTree* memBase = tree->Base();
+        /*
         if (memBase->TypeGet() == TYP_REF)
         {
             printf("[CLAMP] %s %d dataReg %d\n", __PRETTY_FUNCTION__, __LINE__, dataReg);
         }
+        */
         GetEmitter()->emitInsLoadStoreOp(ins_StoreFromSrc(dataReg, type), emitActualTypeSize(type), dataReg, tree);
 
         // If store was to a variable, update variable liveness after instruction was emitted.
