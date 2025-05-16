@@ -371,7 +371,7 @@ class Object
     static UINT GetOffsetOfFirstField()
     {
         LIMITED_METHOD_CONTRACT;
-        _ASSERTE(!"GetOffsetOfFirstField");
+        //_ASSERTE(!"GetOffsetOfFirstField");
         return sizeof(ObjectInternal);
     }
 
@@ -643,7 +643,8 @@ public:
         if (pMT->IsMultiDimArray())
         {
             return dac_cast<PTR_INT32>(
-                dac_cast<TADDR>(m_pObj) + sizeof(*this));
+                //dac_cast<TADDR>(m_pObj) + sizeof(*this));
+                dac_cast<TADDR>(m_pObj) + sizeof(ArrayBaseInternal));
         }
         else
         {
@@ -667,7 +668,6 @@ public:
 
     static unsigned GetOffsetOfNumComponents() {
         LIMITED_METHOD_CONTRACT;
-        _ASSERTE(!"CHECK GetOffsetOfNumComponents");
         return offsetof(ArrayBaseInternal, m_NumComponents);
     }
 
