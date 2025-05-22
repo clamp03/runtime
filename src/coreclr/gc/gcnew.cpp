@@ -89,6 +89,9 @@ public:
     static size_t* IND_LIST;
     static size_t  IND_CURR;
     static CLRCriticalSection ngc_threads_timeout_cs;
+    static VOLATILE(BOOL) ngc_started;
+    static GCEvent ngc_done_event;
+    static size_t gc_count;
 };
 
 BOOL ngc_heap::keep_ngc_threads_p = TRUE;
@@ -99,6 +102,8 @@ heap_region* ngc_heap::PINNED_MEM = NULL;
 size_t* ngc_heap::IND_LIST = NULL;
 size_t  ngc_heap::IND_CURR = 0;
 CLRCriticalSection ngc_heap::ngc_threads_timeout_cs;
+VOLATILE(BOOL) ngc_heap::ngc_started;
+size_t ngc_heap::gc_count = 0;
 
 size_t   MEM_SIZE = 1024 * 1024 * 4;
 size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
@@ -111,58 +116,71 @@ bool IsSuspensionPending = false;
 size_t loh_size_threshold = LARGE_OBJECT_SIZE;
 
 GCEvent ngc_start_event;
-GCEvent ngc_done_event;
+GCEvent ngc_heap::ngc_done_event;
+
+GCEvent *GCHeap::WaitForGCEvent         = NULL;
 
 #define SPECIAL_HEADER_BITS (0x3)
+#define GC_MARKED       (size_t)0x1
+#define OBJ_BIASED      (size_t)0x2
 
 // gcee.cpp
 void GCHeap::UpdatePreGCCounters()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::ReportGenerationBounds()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::UpdatePostGCCounters()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 int GCHeap::GetLastGCPercentTimeInGC()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::GetLastGCGenerationSize(int gen)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::GetCurrentObjSize()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::GetLastGCStartTime(int generation)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::GetLastGCDuration(int generation)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::GetNow()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
@@ -174,8 +192,21 @@ bool GCHeap::IsGCInProgressHelper(bool bConsiderGCStart)
 
 uint32_t GCHeap::WaitUntilGCComplete(bool bConsiderGCStart)
 {
-    // assert(!"Not Implemented Yet");
-    return 0;
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    if (bConsiderGCStart)
+    {
+        while (ngc_heap::ngc_started)
+        {
+            ngc_heap::ngc_done_event.Wait(INFINITE, FALSE);
+        }
+    }
+    uint32_t dwWaitResult = NOERROR;
+    if (IsInProgress)
+    {
+        ASSERT( WaitForGCEvent->IsValid() );
+        dwWaitResult = WaitForGCEvent->Wait(INFINITE, FALSE );
+    }
+    return dwWaitResult;
 }
 
 void GCHeap::SetGCInProgress(bool fInProgress)
@@ -186,61 +217,69 @@ void GCHeap::SetGCInProgress(bool fInProgress)
 
 void GCHeap::SetWaitForGCEvent()
 {
+    WaitForGCEvent->Set();
     //assert(!"Not Implemented Yet");
 }
 
 void GCHeap::ResetWaitForGCEvent()
 {
+    WaitForGCEvent->Set();
     // assert(!"Not Implemented Yet");
 }
 
 void GCHeap::WaitUntilConcurrentGCComplete()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 bool GCHeap::IsConcurrentGCInProgress()
 {
-    // assert(!"Not Implemented Yet");
-    return false;
+    fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IsInProgress);
+    return IsInProgress;
 }
 
 void GCHeap::DiagTraceGCSegments()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagDescrGenerations(gen_walk_fn fn, void *context)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 segment_handle GCHeap::RegisterFrozenSegment(segment_info *pseginfo)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
     return NULL;
 }
 
 void GCHeap::UnregisterFrozenSegment(segment_handle seg)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 bool GCHeap::IsInFrozenSegment(Object *object)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
     return false;
 }
 
 void GCHeap::UpdateFrozenSegment(segment_handle seg, uint8_t* allocated, uint8_t* committed)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 bool GCHeap::RuntimeStructuresValid()
 {
-    // assert(!"Not Implemented Yet");
-    return true;
+    return GCScan::GetGcRuntimeStructuresValid();
 }
 
 void GCHeap::SetSuspensionPending(bool fSuspensionPending)
@@ -260,6 +299,7 @@ void GCHeap::ControlPrivateEvents(GCEventKeyword keyword, GCEventLevel level)
 
 uint64_t GCHeap::GetGenerationBudget(int generation)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
@@ -267,17 +307,21 @@ uint64_t GCHeap::GetGenerationBudget(int generation)
 // gc.cpp
 void GCHeap::Shutdown()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::ValidateObjectMember(Object* obj)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 HRESULT GCHeap::StaticShutdown()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
+    GCScan::GcRuntimeStructuresValid(FALSE);
     return S_OK;
 }
 
@@ -288,31 +332,46 @@ HRESULT GCHeap::Init(size_t hn)
 
 HRESULT GCHeap::Initialize()
 {
+    WaitForGCEvent = new (nothrow) GCEvent;
+    if (!WaitForGCEvent)
+    {
+        return E_OUTOFMEMORY;
+    }
+
+    if (!WaitForGCEvent->CreateManualEventNoThrow(TRUE))
+    {
+        return E_FAIL;
+    }
+
     // assert(!"Not Implemented Yet");
     loh_size_threshold = (size_t)GCConfig::GetLOHThreshold();
     loh_size_threshold = max(loh_size_threshold, LARGE_OBJECT_SIZE);
 
-    HRESULT hres = S_OK;
     if (ngc_heap::init_ngc_heap() != TRUE)
     {
-        hres = E_OUTOFMEMORY;
+        return E_OUTOFMEMORY;
     }
-    return hres;
+
+    GCScan::GcRuntimeStructuresValid(TRUE);
+    return S_OK;
 }
 
 bool GCHeap::IsPromoted(Object* object)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return false;
 }
 
 size_t GCHeap::GetPromotedBytes(int heap_index)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 void GCHeap::SetYieldProcessorScalingFactor(float scalingFactor)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
@@ -324,32 +383,67 @@ unsigned int GCHeap::WhichGeneration(Object* object)
 
 enable_no_gc_region_callback_status GCHeap::EnableNoGCRegionCallback(NoGCRegionCallbackFinalizerWorkItem* callback, uint64_t callback_threshold)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return enable_no_gc_region_callback_status::not_started;
 }
 
 FinalizerWorkItem* GCHeap::GetExtraWorkForFinalization()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
     return NULL;
 }
 
 unsigned int GCHeap::GetGenerationWithRange(Object* object, uint8_t** ppStart, uint8_t** ppAllocated, uint8_t** ppReserved)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 bool GCHeap::IsEphemeral(Object* object)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return false;
 }
 
 Object * GCHeap::NextObj(Object * object)
 {
-    // assert(!"Not Implemented Yet");
-    return NULL;
+    if (object == nullptr) return nullptr;
+
+    uint8_t* addr = (uint8_t*)object;
+    size_t info = *((uintptr_t*)addr + 1);
+    size_t size = info & ~0x3;
+
+    Object* ret = nullptr;
+    if (g_gc_copying_address == 0)
+    {
+        Object* nextObj = (Object*)(addr + size);
+        if (nextObj->m_pObj != nullptr)
+        {
+            ret = (Object*)(addr + size);
+        }
+    }
+    else if (ngc_heap::OLD_MEM)
+    {
+        while (ngc_heap::OLD_MEM->isInHeapRegion(addr))
+        {
+            addr = addr + size;
+            if ((info & GC_MARKED))
+            {
+                if (((Object*)addr)->m_pObj != nullptr)
+                {
+                    ret = (Object*)addr;
+                }
+                break;
+            }
+            info = *((uintptr_t*)addr + 1);
+            size = info & ~0x3;
+        }
+    }
+    return ret;
 }
 
 bool GCHeap::IsHeapPointer(void* vpObject, bool small_heap_only)
@@ -361,11 +455,10 @@ bool GCHeap::IsHeapPointer(void* vpObject, bool small_heap_only)
 
 void GCHeap::Promote(Object** ppObject, ScanContext* sc, uint32_t flags)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
-#define GC_MARKED       (size_t)0x1
-#define OBJ_BIASED      (size_t)0x2
 class CObjectHeader : public Object
 {
 public:
@@ -887,6 +980,7 @@ void ngc_heap::relocate(Object** ppObject, ScanContext* sc,
 
 bool GCHeap::StressHeap(gc_alloc_context * context)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return false;
 }
@@ -895,6 +989,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
     if (size > GetLOHThreshold())
     {
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         assert(!"Not Implemented Yet");
         return nullptr;
     }
@@ -906,11 +1001,13 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 
 void GCHeap::FixAllocContext(gc_alloc_context* context, void* arg, void *heap)
 {
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
 }
 
 Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return NULL;
 }
@@ -937,6 +1034,7 @@ BOOL ngc_heap::init_ngc_heap()
     assert((uint8_t*)allocated + 16 == (uint8_t*)MEM->getAddr());
 
     ngc_threads_timeout_cs.Initialize();
+    ngc_started = FALSE;
 
     return TRUE;
 }
@@ -945,10 +1043,12 @@ BOOL ngc_heap::prepare_ngc_thread()
 {
     BOOL success = FALSE;
     ngc_threads_timeout_cs.Enter();
+
     if (!ngc_thread_running)
     {
         if (create_ngc_thread_support() && create_ngc_thread())
         {
+            ngc_thread_running = TRUE;
             success = TRUE;
         }
     }
@@ -1010,7 +1110,7 @@ void ngc_heap::ngc_copy_phase()
     size_t idx = 0;
     size_t total = 0;
     IND_CURR = 0;
-    heap_region* mem = OLD_MEM;
+    heap_region* mem = ngc_heap::OLD_MEM;
     while (idx < mem->curr)
     {
         uint8_t** oldAddr = (uint8_t**)(mem->getAddr(idx));
@@ -1059,7 +1159,7 @@ void ngc_heap::ngc_copy_phase()
             continue;
         }
 
-        fprintf(stderr, "[CLAMP] %s %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, i, IND_CURR, OLD_MEM->count);
+        //fprintf(stderr, "[CLAMP] %s %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, i, IND_CURR, OLD_MEM->count);
         size_t oldBiased = info & OBJ_BIASED;
         size_t offset = Interlocked::ExchangeAdd(&MEM->curr, size);
         assert(offset + size < MEM->size);
@@ -1119,7 +1219,7 @@ void ngc_heap::ngc_reloc_phase()
 
 void ngc_heap::garbage_collect()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
     prepare_ngc_thread();
     start_ngc();
@@ -1128,12 +1228,15 @@ void ngc_heap::garbage_collect()
 
 void ngc_heap::ngc()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    gc_count += 1;
+    ngc_started = TRUE;
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     ngc_mark_phase();
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     ngc_copy_phase();
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     ngc_reloc_phase();
+    ngc_started = FALSE;
 }
 
 BOOL ngc_heap::create_ngc_thread()
@@ -1179,13 +1282,12 @@ void ngc_heap::ngc_thread_function(void* args)
     {
         cooperative_mode = GCToEEInterface::EnablePreemptiveGC();
         uint32_t result = ngc_start_event.Wait(INFINITE, FALSE);
-        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+        // fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
         if (!keep_ngc_threads_p)
         {
             ngc_thread_running = FALSE;
             break;
         }
-        ngc_thread_running = TRUE;
         ngc();
 
         ngc_start_event.Reset();
@@ -1201,7 +1303,7 @@ void ngc_heap::start_ngc()
     ngc_done_event.Wait(INFINITE, FALSE);
     ngc_done_event.Reset();
     ngc_start_event.Set();
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
 }
 
 
@@ -1225,13 +1327,15 @@ BOOL ngc_heap::isHeapPointer(void* obj, bool small_heap_only)
 
 Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
+    /*
     static int counter = 0;
     counter += 1;
     if (counter % 100 == 0 && counter < 250)
     {
-        fprintf(stderr, "[CLAMP] %s %d --- \n", __PRETTY_FUNCTION__, __LINE__);
+        //fprintf(stderr, "[CLAMP] %s %d --- \n", __PRETTY_FUNCTION__, __LINE__);
         garbage_collect();
     }
+    */
     // fprintf(stderr, "[CLAMP] %s %d ALLOC\n", __PRETTY_FUNCTION__, __LINE__);
     // Check indirection is working well after objects are moved.
 
@@ -1287,7 +1391,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
             if (offset + size >= mem->size)
             {
                 Interlocked::ExchangeAdd(&mem->curr, -size);
-                fprintf(stderr, "[CLAMP] %s %d ---\n", __PRETTY_FUNCTION__, __LINE__);
+                // fprintf(stderr, "[CLAMP] %s %d ---\n", __PRETTY_FUNCTION__, __LINE__);
                 garbage_collect();
             }
             else
@@ -1313,7 +1417,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, ret, obj, size);
         *(uintptr_t*)ret = (uintptr_t)obj;
         *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
-        fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, offset);
+        //fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, offset);
 
         return (Object*)ret;
     }
@@ -1401,6 +1505,7 @@ HRESULT GCHeap::GarbageCollect(int generation, bool isPinned, int size)
 
 size_t GCHeap::GarbageCollectTry(int generation, BOOL low_memory_p, int mode)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
@@ -1417,18 +1522,21 @@ void* GCHeap::UpdateInterioObject(void* objAddr, void* addr)
 
 unsigned GCHeap::GetGcCount()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
-    return 0;
+    return ngc_heap::gc_count;
 }
 
 size_t GCHeap::GarbageCollectGeneration(unsigned int gen, gc_reason reason)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::GetTotalBytesInUse()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
@@ -1440,12 +1548,14 @@ uint64_t GCHeap::GetTotalAllocatedBytes()
 
 int GCHeap::CollectionCount(int generation, int get_bgc_fgc_count)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::ApproxTotalBytesInUse(BOOL small_heap_only)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
@@ -1459,6 +1569,7 @@ bool GCHeap::IsThreadUsingAllocationContextHeap(gc_alloc_context* context, int t
 
 int GCHeap::GetNumberOfHeaps()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
@@ -1490,122 +1601,143 @@ void GCHeap::GetMemoryInfo(uint64_t* highMemLoadThresholdBytes,
         uint64_t* pauseInfoRaw,
         int kind)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 int64_t GCHeap::GetTotalPauseDuration()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 void GCHeap::EnumerateConfigurationValues(void* context, ConfigurationValueFunc configurationValueFunc)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 uint32_t GCHeap::GetMemoryLoad()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 int GCHeap::GetGcLatencyMode()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 int GCHeap::SetGcLatencyMode(int newLatencyMode)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 int GCHeap::GetLOHCompactionMode()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 void GCHeap::SetLOHCompactionMode(int newLOHCompactionMode)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 bool GCHeap::RegisterForFullGCNotification(uint32_t gen2Percentage,
         uint32_t lohPercentage)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return false;
 }
 
 bool GCHeap::CancelFullGCNotification()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return false;
 }
 
 int GCHeap::WaitForFullGCApproach(int millisecondsTimeout)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 int GCHeap::WaitForFullGCComplete(int millisecondsTimeout)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 int GCHeap::StartNoGCRegion(uint64_t totalSize, bool lohSizeKnown, uint64_t lohSize, bool disallowFullBlockingGC)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 int GCHeap::EndNoGCRegion()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 void GCHeap::PublishObject(uint8_t* Obj)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
 }
 
 size_t GCHeap::GetValidSegmentSize(bool large_seg)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 void GCHeap::SetReservedVMLimit(size_t vmlimit)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 Object* GCHeap::GetNextFinalizableObject()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return NULL;
 }
 
 size_t GCHeap::GetNumberFinalizableObjects()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 size_t GCHeap::GetFinalizablePromotedCount()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }
 
 bool GCHeap::RegisterForFinalization(int gen, Object* obj)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return false;
 }
@@ -1617,46 +1749,55 @@ void GCHeap::SetFinalizationRun(Object* obj)
 
 void GCHeap::DiagWalkObject(Object* obj, walk_fn fn, void* context)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagWalkObject2(Object* obj, walk_fn2 fn, void* context)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagWalkSurvivorsWithType(void* gc_context, record_surv_fn fn, void* diag_context, walk_surv_type type, int gen_number)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagWalkHeap(walk_fn fn, void* context, int gen_number, bool walk_large_object_heap_p)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagWalkHeapWithACHandling(walk_fn fn, void* context, int gen_number, bool walk_large_object_heap_p)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagWalkFinalizeQueue(void* gc_context, fq_walk_fn fn)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagScanFinalizeQueue(fq_scan_fn fn, ScanContext* sc)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagScanHandles(handle_scan_fn fn, int gen_number, ScanContext* context)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::DiagScanDependentHandles(handle_scan_fn fn, int gen_number, ScanContext* context)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
@@ -1667,33 +1808,37 @@ size_t GCHeap::GetLOHThreshold()
 
 void GCHeap::DiagGetGCSettings(EtwGCSettingsInfo* etw_settings)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 HRESULT GCHeap::WaitUntilConcurrentGCCompleteAsync(int millisecondsTimeout)
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return S_OK;
 }
 
 void GCHeap::TemporaryEnableConcurrentGC()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 void GCHeap::TemporaryDisableConcurrentGC()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
 
 bool GCHeap::IsConcurrentGCEnabled()
 {
-    assert(!"Not Implemented Yet");
-    return false;
+    return TRUE;
 }
 
 int GCHeap::RefreshMemoryLimit()
 {
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     return 0;
 }

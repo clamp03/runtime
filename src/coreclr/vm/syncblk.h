@@ -1671,7 +1671,12 @@ class ObjHeader
     PTR_Object GetBaseObject()
     {
         LIMITED_METHOD_DAC_CONTRACT;
-        return dac_cast<PTR_Object>(dac_cast<TADDR>(this + 1));
+        TADDR addr = dac_cast<TADDR>(this + 1);
+        if (*dac_cast<PTR_TADDR>(addr - 12) == addr)
+        {
+            return dac_cast<PTR_Object>(addr - 12);
+        }
+        return dac_cast<PTR_Object>(addr - 16);
     }
 
     BOOL Wait(INT32 timeOut);
