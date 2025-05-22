@@ -27,7 +27,7 @@ public:
     heap_region* next;
     size_t curr;
     size_t size;
-    size_t pad;
+    size_t count;
     uint8_t mem;
 
     bool isInHeapRegion(void* addr)
@@ -46,29 +46,72 @@ public:
     {
         return getAddr(size);
     }
+    size_t getSize()
+    {
+        return curr;
+    }
 };
 
-size_t   MEM_SIZE = 1024 * 1024 * 10;
-heap_region* MEM = NULL;
-heap_region* OLD_MEM = NULL;
+class ngc_heap
+{
+public:
+    static BOOL init_ngc_heap();
+    static BOOL prepare_ngc_thread();
+    static void thread_function();
+    static void ngc();
+    static void ngc_mark_phase();
+    static void ngc_copy_phase();
+    static void ngc_reloc_phase();
+    static void ngc_thread_function(void* args);
+    static BOOL create_ngc_thread();
+    static BOOL create_ngc_thread_support();
+    static void garbage_collect();
+    static void start_ngc();
+    static BOOL isHeapPointer(void* vpObject, bool small_heap_only);
+    static void mark_object_simple(uint8_t** po);
+    static uint8_t** findObjectAddress(uint8_t** addr);
+    static void relocate_object_simple(uint8_t** po);
+    static uint8_t** updateInteriorAddr(uint8_t** intAddr, uint8_t** oldAddr);
+    static void mark(Object** ppObject, ScanContext* sc, uint32_t flags);
+    static void relocate(Object** ppObject, ScanContext* sc, uint32_t flags);
+    static Object* alloc(gc_alloc_context* context, size_t size, uint32_t flags);
+    static uint64_t getTotalAllocatedBytes();
+    static void* requestObjectCopy(void* addr, bool isInterior);
+    static void* updateInteriorObject(void* objAddr, void* addr);
+    static void kill_ngc_thread();
 
+public:
+    static BOOL keep_ngc_threads_p;
+    static BOOL ngc_thread_running;
+    static heap_region* MEM;
+    static heap_region* OLD_MEM;
+    static heap_region* PINNED_MEM;
+    static size_t* IND_LIST;
+    static size_t  IND_CURR;
+    static CLRCriticalSection ngc_threads_timeout_cs;
+};
+
+BOOL ngc_heap::keep_ngc_threads_p = TRUE;
+BOOL ngc_heap::ngc_thread_running = FALSE;
+heap_region* ngc_heap::MEM = NULL;
+heap_region* ngc_heap::OLD_MEM = NULL;
+heap_region* ngc_heap::PINNED_MEM = NULL;
+size_t* ngc_heap::IND_LIST = NULL;
+size_t  ngc_heap::IND_CURR = 0;
+CLRCriticalSection ngc_heap::ngc_threads_timeout_cs;
+
+size_t   MEM_SIZE = 1024 * 1024 * 4;
 size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
-heap_region* PINNED_MEM = NULL;
-
-size_t  IND_SIZE = 4 * 1024;
-size_t* IND_DIFF = NULL;
-size_t  IND_CURR = 0;
 
 uintptr_t g_gc_copying_address = 0;
-
-//size_t COUNTER = 0;
-
-ssize_t MEM_DIFF = 0;
 
 bool IsInProgress = false;
 bool IsSuspensionPending = false;
 
-bool OnlyOnce = false;
+size_t loh_size_threshold = LARGE_OBJECT_SIZE;
+
+GCEvent ngc_start_event;
+GCEvent ngc_done_event;
 
 #define SPECIAL_HEADER_BITS (0x3)
 
@@ -240,42 +283,21 @@ HRESULT GCHeap::StaticShutdown()
 
 HRESULT GCHeap::Init(size_t hn)
 {
-    // assert(!"Not Implemented Yet");
     return S_OK;
 }
 
 HRESULT GCHeap::Initialize()
 {
     // assert(!"Not Implemented Yet");
-    if (MEM == NULL)
+    loh_size_threshold = (size_t)GCConfig::GetLOHThreshold();
+    loh_size_threshold = max(loh_size_threshold, LARGE_OBJECT_SIZE);
+
+    HRESULT hres = S_OK;
+    if (ngc_heap::init_ngc_heap() != TRUE)
     {
-        void* allocated = malloc(MEM_SIZE + 16);
-        void* pinned_allocated = malloc(PINNED_MEM_SIZE + 16);
-
-        MEM = (heap_region*)memset(allocated, 0, MEM_SIZE + 16);
-        PINNED_MEM = (heap_region*)memset(pinned_allocated, 0, PINNED_MEM_SIZE + 16);
-
-        MEM->size = MEM_SIZE;
-        PINNED_MEM->size = PINNED_MEM_SIZE;
-
-        MEM->curr = 0;
-        PINNED_MEM->curr = 0;
-
-        MEM->next = nullptr;
-        PINNED_MEM->next = nullptr;
-
-        IND_DIFF = (size_t*)malloc(IND_SIZE);
-        //fprintf(stderr, "[CLAMP] GCHeap::Initialize %p %p %p %p\n",
-        //        MEM->getAddr(), MEM->getEndAddr(), PINNED_MEM->getAddr(), PINNED_MEM->getEndAddr());
-
-        assert((uint8_t*)allocated + 16 == (uint8_t*)MEM->getAddr());
-        //WriteBarrierParameters args = {};
-        //args.operation = WriteBarrierOp::InitializeNewGC;
-        //args.copying_address = (uintptr_t*)&g_gc_copying_address;
-        //printf("[CLAMP] copying_address %p 0x%d\n", &g_gc_copying_address, g_gc_copying_address);
-        // GCToEEInterface::StompWriteBarrier(&args);
+        hres = E_OUTOFMEMORY;
     }
-    return S_OK;
+    return hres;
 }
 
 bool GCHeap::IsPromoted(Object* object)
@@ -334,20 +356,7 @@ bool GCHeap::IsHeapPointer(void* vpObject, bool small_heap_only)
 {
     // assert(!"Not Implemented Yet");
     // // fprintf(stderr, "[CLAMP] GCHeap::IsHeapPointer %p %d\n", vpObject, vpObject >= (void*)MEM && vpObject < (void*)(MEM + MEM_SIZE));
-    heap_region* heap = MEM;
-    while (heap)
-    {
-        if (heap->isInHeapRegion(vpObject))
-        {
-            return TRUE;
-        }
-        heap = heap->next;
-    }
-    if (OLD_MEM)
-    {
-        if (OLD_MEM->isInHeapRegion(vpObject)) return TRUE;
-    }
-    return FALSE;
+    return ngc_heap::isHeapPointer(vpObject, small_heap_only);
 }
 
 void GCHeap::Promote(Object** ppObject, ScanContext* sc, uint32_t flags)
@@ -668,7 +677,7 @@ inline size_t my_get_size (Object* ob)
 }
 #endif //COLLECTIBLE_CLASS
 
-void mark_object_simple(uint8_t** po)
+void ngc_heap::mark_object_simple(uint8_t** po)
 {
     uint8_t* o = *po;
     size_t s = size(o);
@@ -692,7 +701,7 @@ void mark_object_simple(uint8_t** po)
     );
 }
 
-uint8_t** findObjectAddress(uint8_t** addr)
+uint8_t** ngc_heap::findObjectAddress(uint8_t** addr)
 {
     size_t start = 0;
     size_t end = IND_CURR;
@@ -701,7 +710,7 @@ uint8_t** findObjectAddress(uint8_t** addr)
     {
         size_t mid = (start + end) / 2;
 
-        uint8_t** midAddr = (uint8_t**)OLD_MEM->getAddr(IND_DIFF[mid]);
+        uint8_t** midAddr = (uint8_t**)OLD_MEM->getAddr(IND_LIST[mid]);
         // fprintf(stderr, "[CLAMP] %s %d %p %p %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, mid, start, end);
         if ((uintptr_t)midAddr > (uintptr_t)poAddr)
         {
@@ -709,7 +718,7 @@ uint8_t** findObjectAddress(uint8_t** addr)
         }
         else
         {
-            uintptr_t nextAddr = (uintptr_t)(OLD_MEM->getAddr(IND_DIFF[mid + 1]));
+            uintptr_t nextAddr = (uintptr_t)(OLD_MEM->getAddr(IND_LIST[mid + 1]));
             // fprintf(stderr, "[CLAMP] %s %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, (void*)nextAddr);
             if (poAddr < nextAddr)
             {
@@ -748,7 +757,7 @@ uint8_t** findObjectAddress(uint8_t** addr)
     return nullptr;
 }
 
-void GCHeap::Mark(Object** ppObject, ScanContext* sc, uint32_t flags)
+void ngc_heap::mark(Object** ppObject, ScanContext* sc, uint32_t flags)
 {
     uint8_t* po = (uint8_t*)*ppObject;
     if (po == NULL)
@@ -778,11 +787,11 @@ void GCHeap::Mark(Object** ppObject, ScanContext* sc, uint32_t flags)
 
     if (contain_pointers_or_collectible(po))
     {
-        mark_object_simple((uint8_t**)ppObject);
+        ngc_heap::mark_object_simple((uint8_t**)ppObject);
     }
 }
 
-void relocate_object_simple(uint8_t** po)
+void ngc_heap::relocate_object_simple(uint8_t** po)
 {
     uint8_t* o = *po;
     size_t s = size(o);
@@ -809,7 +818,7 @@ void relocate_object_simple(uint8_t** po)
     );
 }
 
-uint8_t** updateInteriorAddr(uint8_t** intAddr, uint8_t** oldAddr)
+uint8_t** ngc_heap::updateInteriorAddr(uint8_t** intAddr, uint8_t** oldAddr)
 {
     uintptr_t addrInfo = *((uintptr_t*)oldAddr + 1);
     uint8_t** newAddr = (uint8_t**)(addrInfo & ~0x3);
@@ -832,7 +841,7 @@ uint8_t** updateInteriorAddr(uint8_t** intAddr, uint8_t** oldAddr)
 }
 
 
-void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
+void ngc_heap::relocate(Object** ppObject, ScanContext* sc,
         uint32_t flags)
 {
     uint8_t** po = (uint8_t**)*ppObject;
@@ -873,7 +882,7 @@ void GCHeap::Relocate(Object** ppObject, ScanContext* sc,
 
 /*static*/ bool GCHeap::IsLargeObject(Object *pObj)
 {
-    return false;
+    return size(pObj) >= loh_size_threshold;
 }
 
 bool GCHeap::StressHeap(gc_alloc_context * context)
@@ -884,6 +893,345 @@ bool GCHeap::StressHeap(gc_alloc_context * context)
 
 Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
+    if (size > GetLOHThreshold())
+    {
+        assert(!"Not Implemented Yet");
+        return nullptr;
+    }
+    else
+    {
+        return ngc_heap::alloc(context, size, flags);
+    }
+}
+
+void GCHeap::FixAllocContext(gc_alloc_context* context, void* arg, void *heap)
+{
+    // assert(!"Not Implemented Yet");
+}
+
+Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
+{
+    assert(!"Not Implemented Yet");
+    return NULL;
+}
+
+//////////
+BOOL ngc_heap::init_ngc_heap()
+{
+    assert(MEM == NULL);
+    void* allocated = malloc(MEM_SIZE + 16);
+    void* pinned_allocated = malloc(PINNED_MEM_SIZE + 16);
+
+    MEM = (heap_region*)memset(allocated, 0, MEM_SIZE + 16);
+    PINNED_MEM = (heap_region*)memset(pinned_allocated, 0, PINNED_MEM_SIZE + 16);
+
+    MEM->size = MEM_SIZE;
+    PINNED_MEM->size = PINNED_MEM_SIZE;
+
+    MEM->curr = 0;
+    PINNED_MEM->curr = 0;
+
+    MEM->next = nullptr;
+    PINNED_MEM->next = nullptr;
+
+    assert((uint8_t*)allocated + 16 == (uint8_t*)MEM->getAddr());
+
+    ngc_threads_timeout_cs.Initialize();
+
+    return TRUE;
+}
+
+BOOL ngc_heap::prepare_ngc_thread()
+{
+    BOOL success = FALSE;
+    ngc_threads_timeout_cs.Enter();
+    if (!ngc_thread_running)
+    {
+        if (create_ngc_thread_support() && create_ngc_thread())
+        {
+            success = TRUE;
+        }
+    }
+    ngc_threads_timeout_cs.Leave();
+    return TRUE;
+}
+
+void ngc_heap::ngc_mark_phase()
+{
+    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+
+    OLD_MEM = MEM;
+
+    int allocSize = MEM_SIZE;
+    void* allocated = malloc(allocSize + 16);
+    MEM = (heap_region*)memset(allocated, 0, allocSize + 16);
+    MEM->size = allocSize;
+    MEM->curr = 0;
+    MEM->next = OLD_MEM->next;
+    OLD_MEM->next = nullptr;
+    assert((uint8_t*)allocated + 16 == (uint8_t*)MEM->getAddr());
+
+    ScanContext sc;
+    sc.thread_number = 0;
+    sc.thread_count = 1;
+    sc.promotion = FALSE;
+    sc.concurrent = FALSE;
+    sc.stack_limit = 0;
+
+    size_t idx = 0;
+    IND_CURR = 0;
+    IND_LIST = (size_t*)malloc(4 * OLD_MEM->count + 4);
+    while (idx < OLD_MEM->curr)
+    {
+        uint8_t** oldAddr = (uint8_t**)(OLD_MEM->getAddr(idx));
+        size_t info = *((uintptr_t*)oldAddr + 1);
+        size_t size = info & ~0x3;
+        IND_LIST[IND_CURR++] = idx;
+        /*
+        if (*(uintptr_t*)oldAddr != 0)
+        {
+            IND_LIST[IND_CURR++] = idx;
+        }
+        */
+        idx += size;
+    }
+    assert(OLD_MEM->count == IND_CURR);
+    IND_LIST[IND_CURR] = OLD_MEM->curr;
+
+    GCScan::GcScanRoots(ngc_heap::mark, 0, 0, &sc);
+    GCScan::GcScanHandles(ngc_heap::mark, 0, 0, &sc);
+
+    Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
+    GCToEEInterface::RestartEE(TRUE);
+}
+
+void ngc_heap::ngc_copy_phase()
+{
+    size_t idx = 0;
+    size_t total = 0;
+    IND_CURR = 0;
+    heap_region* mem = OLD_MEM;
+    while (idx < mem->curr)
+    {
+        uint8_t** oldAddr = (uint8_t**)(mem->getAddr(idx));
+        size_t info = *((uintptr_t*)oldAddr + 1);
+        size_t size = info & ~0x3;
+        if ((info & GC_MARKED) == GC_MARKED)
+        {
+            IND_LIST[IND_CURR++] = idx;
+        }
+        total += 1;
+        idx += size;
+    }
+    IND_LIST[IND_CURR] = mem->curr;
+
+    int i = 0;
+    while (i < IND_CURR)
+    {
+        if ((i % 10) == 0) GCToOSInterface::Sleep(5);
+
+        bool updateChk = false;
+        uint8_t** oldAddr = (uint8_t**)VolatileLoad(&g_gc_copying_address);
+
+        if ((uintptr_t)oldAddr != 0xffffffff)
+        {
+            if (mem->isInHeapRegion((void*)*oldAddr))
+            {
+                updateChk = true;
+            }
+            else
+            {
+                Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
+            }
+        }
+
+        if (!updateChk)
+        {
+            oldAddr = (uint8_t**)(mem->getAddr(IND_LIST[i]));
+            i++;
+        }
+        size_t info = *((uintptr_t*)oldAddr + 1);
+        size_t size = info & ~0x3;
+
+        if ((info & GC_MARKED) == 0)
+        {
+            if (updateChk) Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
+            continue;
+        }
+
+        fprintf(stderr, "[CLAMP] %s %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, i, IND_CURR, OLD_MEM->count);
+        size_t oldBiased = info & OBJ_BIASED;
+        size_t offset = Interlocked::ExchangeAdd(&MEM->curr, size);
+        assert(offset + size < MEM->size);
+        if (offset + size >= MEM->size)
+        {
+            int allocSize = MEM_SIZE;
+            void* allocated = malloc(allocSize + 16);
+            allocated = memset(allocated, 0, allocSize + 16);
+        }
+        Interlocked::ExchangeAdd(&MEM->count, (size_t)1);
+
+        uint8_t** newAddr = (uint8_t**)MEM->getAddr(offset);
+        size_t newBiased = oldBiased;
+        uint8_t biasToggle = 0;
+        if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)newAddr & 0x7))
+        {
+            newBiased = OBJ_BIASED - oldBiased;
+            biasToggle = OBJ_BIASED; // 1 for Increase and 2 for Decrease
+        }
+
+        uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
+        *newAddr = newObj;
+
+        memcpy(newObj - 4, *oldAddr - 4, size - 4 - 4);
+        *oldAddr = newObj;
+
+        *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr | biasToggle;
+        *((uintptr_t*)newAddr + 1) = size | newBiased;
+        if (updateChk)
+        {
+            Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
+        }
+    }
+}
+
+void ngc_heap::ngc_reloc_phase()
+{
+    ScanContext sc;
+    sc.thread_number = 0;
+    sc.thread_count = 1;
+    sc.promotion = FALSE;
+    sc.concurrent = FALSE;
+    sc.stack_limit = 0;
+    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
+    GCScan::GcScanRoots(ngc_heap::relocate, 0, 0, &sc);
+    GCScan::GcScanHandles(ngc_heap::relocate, 0, 0, &sc);
+
+    free(OLD_MEM);
+    OLD_MEM = NULL;
+
+    free(IND_LIST);
+    IND_CURR = 0;
+    IND_LIST = nullptr;
+    GCToEEInterface::RestartEE(TRUE);
+}
+
+void ngc_heap::garbage_collect()
+{
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    prepare_ngc_thread();
+    start_ngc();
+    GCToEEInterface::RestartEE(TRUE);
+}
+
+void ngc_heap::ngc()
+{
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    ngc_mark_phase();
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    ngc_copy_phase();
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    ngc_reloc_phase();
+}
+
+BOOL ngc_heap::create_ngc_thread()
+{
+    ngc_thread_running = GCToEEInterface::CreateThread(ngc_thread_function, NULL, true, ".NET NGC");
+    return ngc_thread_running;
+}
+
+BOOL ngc_heap::create_ngc_thread_support()
+{
+    BOOL ret = FALSE;
+
+    if (!ngc_start_event.CreateManualEventNoThrow(FALSE))
+    {
+        goto cleanup;
+    }
+    if (!ngc_done_event.CreateManualEventNoThrow(TRUE))
+    {
+        goto cleanup;
+    }
+    ret = TRUE;
+
+cleanup:
+    if (!ret)
+    {
+        if (ngc_start_event.IsValid())
+        {
+            ngc_start_event.CloseEvent();
+        }
+
+        if (ngc_done_event.IsValid())
+        {
+            ngc_done_event.CloseEvent();
+        }
+    }
+    return ret;
+}
+
+void ngc_heap::ngc_thread_function(void* args)
+{
+    bool cooperative_mode = true;
+    while (1)
+    {
+        cooperative_mode = GCToEEInterface::EnablePreemptiveGC();
+        uint32_t result = ngc_start_event.Wait(INFINITE, FALSE);
+        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+        if (!keep_ngc_threads_p)
+        {
+            ngc_thread_running = FALSE;
+            break;
+        }
+        ngc_thread_running = TRUE;
+        ngc();
+
+        ngc_start_event.Reset();
+        ngc_done_event.Set();
+        if (cooperative_mode) GCToEEInterface::DisablePreemptiveGC();
+    }
+}
+
+void ngc_heap::start_ngc()
+{
+    assert(ngc_done_event.IsValid());
+    assert(ngc_start_event.IsValid());
+    ngc_done_event.Wait(INFINITE, FALSE);
+    ngc_done_event.Reset();
+    ngc_start_event.Set();
+    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+}
+
+
+BOOL ngc_heap::isHeapPointer(void* obj, bool small_heap_only)
+{
+    heap_region* heap = MEM;
+    while (heap)
+    {
+        if (heap->isInHeapRegion(obj))
+        {
+            return TRUE;
+        }
+        heap = heap->next;
+    }
+    if (OLD_MEM)
+    {
+        if (OLD_MEM->isInHeapRegion(obj)) return TRUE;
+    }
+    return FALSE;
+}
+
+Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
+{
+    static int counter = 0;
+    counter += 1;
+    if (counter % 100 == 0 && counter < 250)
+    {
+        fprintf(stderr, "[CLAMP] %s %d --- \n", __PRETTY_FUNCTION__, __LINE__);
+        garbage_collect();
+    }
     // fprintf(stderr, "[CLAMP] %s %d ALLOC\n", __PRETTY_FUNCTION__, __LINE__);
     // Check indirection is working well after objects are moved.
 
@@ -909,6 +1257,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         size_t offset = Interlocked::ExchangeAdd(&PINNED_MEM->curr , size);
         assert(offset + size < PINNED_MEM->size);
 
+        Interlocked::ExchangeAdd(&PINNED_MEM->count, (size_t)1);
         uint8_t* ret = (uint8_t*)PINNED_MEM->getAddr(offset);
         uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
         uint8_t bias = 0;
@@ -931,43 +1280,24 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     {
         // // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
         size_t offset;
+        heap_region* mem = MEM;
         while (true)
         {
-            heap_region* mem = MEM;
             offset = Interlocked::ExchangeAdd(&mem->curr, size);
             if (offset + size >= mem->size)
             {
-                // fprintf(stderr, "[CLAMP] %s %d 0x%x 0x%x %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, offset, size, mem, mem->curr);
                 Interlocked::ExchangeAdd(&mem->curr, -size);
-                GarbageCollect(0, false, (int)size);
-                /*
-                mem->curr -= size;
-                // fprintf(stderr, "[CLAMP] %s %d OVER %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, offset, size, mem->size);
-                // TODO NEED TO LOCK. => I WILL CHANGE IT TO CALL GC. IN STW, IT WILL INCREASE MEM SO I THINK IT DOESN'T NEED TO LOCK
-                size_t allocSize = size > MEM_SIZE ? size : MEM_SIZE;
-                void* allocated = malloc(allocSize + 16);
-                heap_region* newMem = (heap_region*)memset(allocated, 0, allocSize + 16);
-                newMem->curr = 0;
-                newMem->size = allocSize;
-                newMem->next = mem;
-
-                MEM = newMem;
-                // fprintf(stderr, "[CLAMP] %s %d LINK 0x%x %p %zu %zu\n", __PRETTY_FUNCTION__, __LINE__, offset, MEM->getAddr(), size, allocSize);
-                offset = Interlocked::ExchangeAdd(&MEM->curr , size);
-                mem = MEM;
-#if 0
-GarbageCollect(0, (flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0, (int)size);
-offset = Interlocked::ExchangeAdd((size_t*)MEM - 1, size);
-#endif
-*/
+                fprintf(stderr, "[CLAMP] %s %d ---\n", __PRETTY_FUNCTION__, __LINE__);
+                garbage_collect();
             }
             else
             {
+                Interlocked::ExchangeAdd(&mem->count, (size_t)1);
                 break;
             }
         }
 
-        uint8_t* ret = (uint8_t*)MEM->getAddr(offset);
+        uint8_t* ret = (uint8_t*)mem->getAddr(offset);
         uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4 + 4); // ObjHeader + m_pObj pointer + next pointer
         uint8_t bias = 0;
         if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
@@ -980,254 +1310,32 @@ offset = Interlocked::ExchangeAdd((size_t*)MEM - 1, size);
             bias = 4 - bias;
         }
         obj += bias;
+        // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, ret, obj, size);
         *(uintptr_t*)ret = (uintptr_t)obj;
         *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
-        // fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, offset);
+        fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, offset);
 
         return (Object*)ret;
     }
 }
 
-void GCHeap::FixAllocContext(gc_alloc_context* context, void* arg, void *heap)
+uint64_t ngc_heap::getTotalAllocatedBytes()
 {
-    // assert(!"Not Implemented Yet");
-}
-
-Object* GCHeap::GetContainingObject(void *pInteriorPtr, bool fCollectedGenOnly)
-{
-    assert(!"Not Implemented Yet");
-    return NULL;
-}
-
-void mark_phase(int alloc)
-{
-    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
-    // fprintf(stderr, "[CLAMP] %s %d START %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, MEM, OLD_MEM, alloc);
-
-    OLD_MEM = MEM;
-
-    int allocSize = alloc + MEM_SIZE;
-    void* allocated = malloc(allocSize + 16);
-    MEM = (heap_region*)memset(allocated, 0, allocSize + 16);
-    MEM->size = allocSize;
-    MEM->curr = 0;
-    MEM->next = OLD_MEM->next;
-    OLD_MEM->next = nullptr;
-    assert((uint8_t*)allocated + 16 == (uint8_t*)MEM->getAddr());
-
-    ScanContext sc;
-    sc.thread_number = 0;
-    sc.thread_count = 1;
-    sc.promotion = FALSE;
-    sc.concurrent = FALSE;
-    sc.stack_limit = 0;
-
-    size_t idx = 0;
-    IND_CURR = 0;
-    while (idx < OLD_MEM->curr)
+    heap_region* mem = MEM;
+    size_t total = PINNED_MEM->getSize();
+    if (OLD_MEM)
+        total += OLD_MEM->getSize();
+    while (mem)
     {
-        uint8_t** oldAddr = (uint8_t**)(OLD_MEM->getAddr(idx));
-        size_t info = *((uintptr_t*)oldAddr + 1);
-        size_t size = info & ~0x3;
-        // fprintf(stderr, "[CLAMP] %s %d %p 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, info, size);
-        IND_DIFF[IND_CURR++] = idx;
-        idx += size;
+        total += mem->getSize();
+        mem = mem->next;
     }
-    IND_DIFF[IND_CURR] = OLD_MEM->curr;
-
-    GCScan::GcScanRoots(GCHeap::Mark, 0, 0, &sc);
-    GCScan::GcScanHandles(GCHeap::Mark, 0, 0, &sc);
-
-    // fprintf(stderr, "[CLAMP] %s %d mark_phase %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, MEM->getAddr(), OLD_MEM->getAddr(), OLD_MEM->getEndAddr());
-
-    //*(uintptr_t*)(MEM - 8) = *(uintptr_t*)(OLD_MEM - 8);
-    //*(uintptr_t*)(OLD_MEM - 8) = 0;
-
-    // allocated = malloc(IND_SIZE);
-    // IND_DIFF = (size_t*)memset(allocated, 0, IND_SIZE);
-    IND_CURR = 0;
-
-    // fprintf(stderr, "[CLAMP] %s %d %p %p %p %d %p %p %p %d\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM->getAddr(), OLD_MEM->getEndAddr(), IND_DIFF, IND_CURR, MEM->getAddr(), MEM->getEndAddr(), IND_DIFF, IND_CURR);
-
-    Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
-    GCToEEInterface::RestartEE(TRUE);
-    // fprintf(stderr, "[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
+    return total;
 }
 
-void relocate_phase()
+void* ngc_heap::requestObjectCopy(void* addr, bool isInterior)
 {
-    // fprintf(stderr, "[CLAMP] %s %d START\n", __PRETTY_FUNCTION__, __LINE__);
-    ScanContext sc;
-    sc.thread_number = 0;
-    sc.thread_count = 1;
-    sc.promotion = FALSE;
-    sc.concurrent = FALSE;
-    sc.stack_limit = 0;
-    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
-    Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
-    GCScan::GcScanRoots(GCHeap::Relocate, 0, 0, &sc);
-    GCScan::GcScanHandles(GCHeap::Relocate, 0, 0, &sc);
-
-    //OLD_MEM = (uint8_t*)memset(OLD_MEM, 0, MEM_SIZE);
-    // fprintf(stderr, "[CLAMP] %s %d FREE %p ~ %p\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM->getAddr(), OLD_MEM->getCurrAddr());
-    free(OLD_MEM);
-    OLD_MEM = NULL;
-    // OLD_MEM_CURR = 0;
-
-#if 0
-    if (MEM_CURR > (size_t)(0.7 * MEM_SIZE))
-    {
-        void* allocated = malloc(MEM_SIZE + 4);
-        *((uintptr_t*)MEM - 1) = (uintptr_t)memset(allocated, 0, MEM_SIZE + 4);
-    }
-#endif
-    // fprintf(stderr, "[CLAMP] %s %d DONE\n", __PRETTY_FUNCTION__, __LINE__);
-    GCToEEInterface::RestartEE(TRUE);
-}
-
-void copying_phase(heap_region* mem)
-{
-    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, mem);
-    size_t idx = 0;
-    size_t total = 0;
-    while (idx < mem->curr)
-    {
-        uint8_t** oldAddr = (uint8_t**)(mem->getAddr(idx));
-        size_t info = *((uintptr_t*)oldAddr + 1);
-        size_t size = info & ~0x3;
-        if ((info & GC_MARKED) == GC_MARKED)
-        {
-            //fprintf(stderr, "[CLAMP] %s %d IND_CURR 0x%x 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, idx, size, oldAddr);
-            IND_DIFF[IND_CURR++] = idx;
-        }
-        total += 1;
-        idx += size;
-    }
-    // fprintf(stderr, "[CLAMP] %s %d TOTAL %d LIVE %d %p\n", __PRETTY_FUNCTION__, __LINE__, total, IND_CURR, mem->getCurrAddr());
-    IND_DIFF[IND_CURR] = mem->curr;
-
-    // fprintf(stderr, "[CLAMP] BEFORE %s %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
-    int i = 0;
-    while (i < IND_CURR)
-    {
-        if ((i % 10) == 0) GCToOSInterface::Sleep(5);
-
-        bool updateChk = false;
-        uint8_t** oldAddr = (uint8_t**)VolatileLoad(&g_gc_copying_address);
-
-        if ((uintptr_t)oldAddr != 0xffffffff)
-        {
-            if (mem->isInHeapRegion((void*)*oldAddr))
-            {
-                updateChk = true;
-            }
-            else
-            {
-                // fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-                Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
-            }
-        }
-
-        if (!updateChk)
-        {
-            oldAddr = (uint8_t**)(mem->getAddr(IND_DIFF[i]));
-            i++;
-        }
-        // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr);
-        size_t info = *((uintptr_t*)oldAddr + 1);
-        size_t size = info & ~0x3;
-
-        // fprintf(stderr, "[CLAMP] %s %d 0x%x 0x%x 0x%x 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, i, size, mem->curr, updateChk, info);
-        if ((info & GC_MARKED) == 0)
-        {
-            // fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, updateChk);
-            if (updateChk) Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
-            continue;
-        }
-
-        // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x %d\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, size, updateChk);
-        // assert(size < MEM_SIZE);
-
-        size_t oldBiased = info & OBJ_BIASED;
-        size_t offset = Interlocked::ExchangeAdd(&MEM->curr, size);
-        // assert(offset + size < MEM_SIZE);
-
-        uint8_t** newAddr = (uint8_t**)MEM->getAddr(offset);
-        size_t newBiased = oldBiased;
-        uint8_t biasToggle = 0;
-        if (((uintptr_t)oldAddr & 0x7) != ((uintptr_t)newAddr & 0x7))
-        {
-            newBiased = OBJ_BIASED - oldBiased;
-            biasToggle = OBJ_BIASED; // 1 for Increase and 2 for Decrease
-        }
-
-        uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
-        *newAddr = newObj;
-
-        memcpy(newObj - 4, *oldAddr - 4, size - 4 - 4);
-        *oldAddr = newObj;
-
-        *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr | biasToggle;
-        *((uintptr_t*)newAddr + 1) = size | newBiased;
-        // fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, updateChk);
-        if (updateChk)
-        {
-            Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
-        }
-
-        // fprintf(stderr, "[CLAMP] %s %d %p %p %p %p %p %p %d %d\n", __PRETTY_FUNCTION__, __LINE__, *oldAddr, newObj, oldAddr, newAddr, *oldAddr, *newAddr, oldBiased, newBiased);
-    }
-    // fprintf(stderr, "[CLAMP] FINISH %s %d %x %d\n", __PRETTY_FUNCTION__, __LINE__, IND_CURR, IND_CURR);
-    // fprintf(stderr, "[CLAMP] DONE COPYING\n");
-    relocate_phase();
-}
-
-void ngc_thread(void* arg)
-{
-    // fprintf(stderr, "[CLAMP] RUN NGC THREAD\n");
-    copying_phase(OLD_MEM);
-}
-
-HRESULT GCHeap::GarbageCollect(int generation, bool isPinned, int size)
-{
-
-#if 0
-    COUNTER += 1;
-    if (COUNTER % 500 == 0)
-    {
-        // fprintf(stderr, "[CLAMP] COUNT %d\n", COUNTER);
-    }
-    if (COUNTER == 0 || COUNTER % 100 != 0 /*|| OnlyOnce*/)
-    {
-        return S_OK;
-    }
-#endif
-    if (VolatileLoad(&g_gc_copying_address) != 0)
-    {
-        bool bToggleGC = GCToEEInterface::EnablePreemptiveGC();
-        YieldProcessor();
-        // fprintf(stderr, "[CLAMP] NOW GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-        if (bToggleGC)
-        {
-            GCToEEInterface::DisablePreemptiveGC();
-        }
-        return S_OK;
-    }
-    OnlyOnce = TRUE;
-    mark_phase(size);
-    GCToEEInterface::CreateThread(ngc_thread, NULL, false, ".NET NGC");
-
-    return S_OK;
-}
-
-size_t GCHeap::GarbageCollectTry(int generation, BOOL low_memory_p, int mode)
-{
-    assert(!"Not Implemented Yet");
-    return 0;
-}
-
-void* GCHeap::RequestObjectCopy(void* addr, bool isInterior)
-{
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     if (OLD_MEM == nullptr)
     {
         return nullptr;
@@ -1262,16 +1370,49 @@ void* GCHeap::RequestObjectCopy(void* addr, bool isInterior)
         YieldProcessor();
     }
     return obj;
-}
 
-void* GCHeap::UpdateInterioObject(void* objAddr, void* addr)
+}
+void* ngc_heap::updateInteriorObject(void* objAddr, void* addr)
 {
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     if (VolatileLoad(&g_gc_copying_address) == 0 || !OLD_MEM->isInHeapRegion(addr))
     {
         return addr;
     }
 
     return (void*)updateInteriorAddr((uint8_t**)addr, (uint8_t**)objAddr);
+}
+
+void ngc_heap::kill_ngc_thread()
+{
+    ngc_threads_timeout_cs.Destroy();
+    ngc_start_event.CloseEvent();
+    ngc_done_event.CloseEvent();
+}
+
+//////////
+
+
+HRESULT GCHeap::GarbageCollect(int generation, bool isPinned, int size)
+{
+    ngc_heap::garbage_collect();
+    return S_OK;
+}
+
+size_t GCHeap::GarbageCollectTry(int generation, BOOL low_memory_p, int mode)
+{
+    assert(!"Not Implemented Yet");
+    return 0;
+}
+
+void* GCHeap::RequestObjectCopy(void* addr, bool isInterior)
+{
+    return ngc_heap::requestObjectCopy(addr, isInterior);
+}
+
+void* GCHeap::UpdateInterioObject(void* objAddr, void* addr)
+{
+    return ngc_heap::updateInteriorObject(objAddr, addr);
 }
 
 unsigned GCHeap::GetGcCount()
@@ -1294,8 +1435,7 @@ size_t GCHeap::GetTotalBytesInUse()
 
 uint64_t GCHeap::GetTotalAllocatedBytes()
 {
-    assert(!"Not Implemented Yet");
-    return 0;
+    return ngc_heap::getTotalAllocatedBytes();
 }
 
 int GCHeap::CollectionCount(int generation, int get_bgc_fgc_count)
@@ -1472,7 +1612,7 @@ bool GCHeap::RegisterForFinalization(int gen, Object* obj)
 
 void GCHeap::SetFinalizationRun(Object* obj)
 {
-    //assert(!"Not Implemented Yet");
+    ((CObjectHeader*)obj)->GetHeader()->SetBit(BIT_SBLK_FINALIZER_RUN);
 }
 
 void GCHeap::DiagWalkObject(Object* obj, walk_fn fn, void* context)
@@ -1522,8 +1662,7 @@ void GCHeap::DiagScanDependentHandles(handle_scan_fn fn, int gen_number, ScanCon
 
 size_t GCHeap::GetLOHThreshold()
 {
-    assert(!"Not Implemented Yet");
-    return 0;
+    return loh_size_threshold;
 }
 
 void GCHeap::DiagGetGCSettings(EtwGCSettingsInfo* etw_settings)

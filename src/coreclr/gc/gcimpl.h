@@ -135,13 +135,6 @@ public:
     PER_HEAP_ISOLATED void    Promote (Object** object,
                                           ScanContext* sc,
                                           uint32_t flags=0);
-#ifdef FEATURE_NEW_GC
-    // Mark an object
-    PER_HEAP_ISOLATED void    Mark (Object** object,
-                                          ScanContext* sc,
-                                          uint32_t flags=0);
-#endif // FEATURE_NEW_GC
-
 
     // Find the relocation address for an object
     PER_HEAP_ISOLATED void    Relocate (Object** object,
