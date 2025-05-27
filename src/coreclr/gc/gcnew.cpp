@@ -50,6 +50,10 @@ public:
     {
         return curr;
     }
+    size_t getAlloc()
+    {
+        return size;
+    }
 };
 
 class ngc_heap
@@ -75,7 +79,9 @@ public:
     static void mark(Object** ppObject, ScanContext* sc, uint32_t flags);
     static void relocate(Object** ppObject, ScanContext* sc, uint32_t flags);
     static Object* alloc(gc_alloc_context* context, size_t size, uint32_t flags);
+    static Object* loh_alloc(gc_alloc_context* context, size_t size, uint32_t flags);
     static uint64_t getTotalAllocatedBytes();
+    static size_t getTotalBytesInUse();
     static void* requestObjectCopy(void* addr, bool isInterior);
     static void* updateInteriorObject(void* objAddr, void* addr);
     static void kill_ngc_thread();
@@ -86,12 +92,14 @@ public:
     static heap_region* MEM;
     static heap_region* OLD_MEM;
     static heap_region* PINNED_MEM;
+    static heap_region* LOH_MEM;
     static size_t* IND_LIST;
     static size_t  IND_CURR;
     static CLRCriticalSection ngc_threads_timeout_cs;
     static VOLATILE(BOOL) ngc_started;
     static GCEvent ngc_done_event;
     static size_t gc_count;
+    //static FinalizerWorkItem* finalizer_work;
 };
 
 BOOL ngc_heap::keep_ngc_threads_p = TRUE;
@@ -99,11 +107,14 @@ BOOL ngc_heap::ngc_thread_running = FALSE;
 heap_region* ngc_heap::MEM = NULL;
 heap_region* ngc_heap::OLD_MEM = NULL;
 heap_region* ngc_heap::PINNED_MEM = NULL;
+heap_region* ngc_heap::LOH_MEM = NULL;
 size_t* ngc_heap::IND_LIST = NULL;
 size_t  ngc_heap::IND_CURR = 0;
 CLRCriticalSection ngc_heap::ngc_threads_timeout_cs;
 VOLATILE(BOOL) ngc_heap::ngc_started;
 size_t ngc_heap::gc_count = 0;
+uint64_t time_clock = 0;
+//FinalizerWorkItem* ngc_heap::finalizer_work = nullptr;
 
 size_t   MEM_SIZE = 1024 * 1024 * 4;
 size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
@@ -119,6 +130,17 @@ GCEvent ngc_start_event;
 GCEvent ngc_heap::ngc_done_event;
 
 GCEvent *GCHeap::WaitForGCEvent         = NULL;
+
+uint64_t qpf;
+double qpf_ms;
+double qpf_us;
+
+uint64_t GetHighPrecisionTimeStamp()
+{
+    int64_t ts = GCToOSInterface::QueryPerformanceCounter();
+
+    return (uint64_t)((double)ts * qpf_us);
+}
 
 #define SPECIAL_HEADER_BITS (0x3)
 #define GC_MARKED       (size_t)0x1
@@ -192,7 +214,7 @@ bool GCHeap::IsGCInProgressHelper(bool bConsiderGCStart)
 
 uint32_t GCHeap::WaitUntilGCComplete(bool bConsiderGCStart)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     if (bConsiderGCStart)
     {
         while (ngc_heap::ngc_started)
@@ -235,7 +257,6 @@ void GCHeap::WaitUntilConcurrentGCComplete()
 
 bool GCHeap::IsConcurrentGCInProgress()
 {
-    fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, IsInProgress);
     return IsInProgress;
 }
 
@@ -253,7 +274,7 @@ void GCHeap::DiagDescrGenerations(gen_walk_fn fn, void *context)
 
 segment_handle GCHeap::RegisterFrozenSegment(segment_info *pseginfo)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     // assert(!"Not Implemented Yet");
     return NULL;
 }
@@ -266,8 +287,6 @@ void GCHeap::UnregisterFrozenSegment(segment_handle seg)
 
 bool GCHeap::IsInFrozenSegment(Object *object)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    // assert(!"Not Implemented Yet");
     return false;
 }
 
@@ -332,6 +351,10 @@ HRESULT GCHeap::Init(size_t hn)
 
 HRESULT GCHeap::Initialize()
 {
+    qpf = (uint64_t)GCToOSInterface::QueryPerformanceFrequency();
+    qpf_ms = 1000.0 / (double)qpf;
+    qpf_us = 1000.0 * 1000.0 / (double)qpf;
+
     WaitForGCEvent = new (nothrow) GCEvent;
     if (!WaitForGCEvent)
     {
@@ -353,6 +376,7 @@ HRESULT GCHeap::Initialize()
     }
 
     GCScan::GcRuntimeStructuresValid(TRUE);
+
     return S_OK;
 }
 
@@ -390,9 +414,9 @@ enable_no_gc_region_callback_status GCHeap::EnableNoGCRegionCallback(NoGCRegionC
 
 FinalizerWorkItem* GCHeap::GetExtraWorkForFinalization()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    // assert(!"Not Implemented Yet");
-    return NULL;
+    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //return Interlocked::ExchangePointer(&ngc_heap::finalizer_work, nullptr);
+    return nullptr;
 }
 
 unsigned int GCHeap::GetGenerationWithRange(Object* object, uint8_t** ppStart, uint8_t** ppAllocated, uint8_t** ppReserved)
@@ -404,9 +428,7 @@ unsigned int GCHeap::GetGenerationWithRange(Object* object, uint8_t** ppStart, u
 
 bool GCHeap::IsEphemeral(Object* object)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return false;
+    return IsHeapPointer((void*)object);
 }
 
 Object * GCHeap::NextObj(Object * object)
@@ -416,6 +438,10 @@ Object * GCHeap::NextObj(Object * object)
     uint8_t* addr = (uint8_t*)object;
     size_t info = *((uintptr_t*)addr + 1);
     size_t size = info & ~0x3;
+    if (size == 0) // LOH
+    {
+        return nullptr;
+    }
 
     Object* ret = nullptr;
     if (g_gc_copying_address == 0)
@@ -989,9 +1015,7 @@ Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
     if (size > GetLOHThreshold())
     {
-        fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-        assert(!"Not Implemented Yet");
-        return nullptr;
+        return ngc_heap::loh_alloc(context, size, flags);
     }
     else
     {
@@ -1046,11 +1070,13 @@ BOOL ngc_heap::prepare_ngc_thread()
 
     if (!ngc_thread_running)
     {
+        GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
         if (create_ngc_thread_support() && create_ngc_thread())
         {
             ngc_thread_running = TRUE;
             success = TRUE;
         }
+        GCToEEInterface::RestartEE(TRUE);
     }
     ngc_threads_timeout_cs.Leave();
     return TRUE;
@@ -1220,10 +1246,11 @@ void ngc_heap::ngc_reloc_phase()
 void ngc_heap::garbage_collect()
 {
     //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    bool cooperative_mode = GCToEEInterface::EnablePreemptiveGC();
     prepare_ngc_thread();
     start_ngc();
-    GCToEEInterface::RestartEE(TRUE);
+    time_clock = GetHighPrecisionTimeStamp();
+    if (cooperative_mode) GCToEEInterface::DisablePreemptiveGC();
 }
 
 void ngc_heap::ngc()
@@ -1325,6 +1352,50 @@ BOOL ngc_heap::isHeapPointer(void* obj, bool small_heap_only)
     return FALSE;
 }
 
+Object* ngc_heap::loh_alloc(gc_alloc_context* context, size_t size, uint32_t flags)
+{
+    if ((flags & GC_ALLOC_ALIGN8) || (flags & GC_ALLOC_ALIGN8_BIAS))
+    {
+        size = Align(size) + Align(sizeof(ObjHeader) + 4 + 4);
+    }
+    else
+    {
+        size = Align(size) + Align(sizeof(ObjHeader) + 4);
+    }
+
+    if ((flags & GC_ALLOC_PINNED_OBJECT_HEAP) == 0)
+    {
+        size += 4;
+    }
+    heap_region* allocated = (heap_region*)malloc(size + 16);
+    do
+    {
+        allocated->next = LOH_MEM;
+    }
+    while(Interlocked::CompareExchange(&LOH_MEM, allocated, allocated->next) != allocated->next);
+
+    allocated->curr = size;
+    allocated->size = size;
+    allocated->count = 1;
+    uint8_t* ret = (uint8_t*)&allocated->mem;
+    uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4 + 4); // ObjHeader + m_pObj pointer + next pointer
+    uint8_t bias = 0;
+    if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
+    {
+        bias += 4;
+    }
+
+    if (flags & GC_ALLOC_ALIGN8_BIAS)
+    {
+        bias = 4 - bias;
+    }
+    obj += bias;
+    *(uintptr_t*)ret = (uintptr_t)obj;
+    *((uintptr_t*)ret + 1) = 0;
+    //fprintf(stderr, "[CLAMP] GCHeap::Alloc LOH %p %p Size 0x%zx LOH: %p\n", ret, obj, size, LOH_MEM);
+    return (Object*)ret;
+}
+
 Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
     /*
@@ -1363,7 +1434,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 
         Interlocked::ExchangeAdd(&PINNED_MEM->count, (size_t)1);
         uint8_t* ret = (uint8_t*)PINNED_MEM->getAddr(offset);
-        uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4); // ObjHeader + m_pObj pointer
+        uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4 + 4); // ObjHeader + m_pObj pointer + next pointer
         uint8_t bias = 0;
         if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
         {
@@ -1376,7 +1447,8 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         }
         obj += bias;
         *(uintptr_t*)ret = (uintptr_t)obj;
-        // fprintf(stderr, "[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, PINNED_MEM->curr - size);
+        *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
+        //fprintf(stderr, "[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, PINNED_MEM->curr - size);
 
         return (Object*)ret;
     }
@@ -1426,6 +1498,20 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 uint64_t ngc_heap::getTotalAllocatedBytes()
 {
     heap_region* mem = MEM;
+    size_t total = PINNED_MEM->getAlloc();
+    if (OLD_MEM)
+        total += OLD_MEM->getAlloc();
+    while (mem)
+    {
+        total += mem->getAlloc();
+        mem = mem->next;
+    }
+    return total;
+}
+
+size_t ngc_heap::getTotalBytesInUse()
+{
+    heap_region* mem = MEM;
     size_t total = PINNED_MEM->getSize();
     if (OLD_MEM)
         total += OLD_MEM->getSize();
@@ -1435,6 +1521,7 @@ uint64_t ngc_heap::getTotalAllocatedBytes()
         mem = mem->next;
     }
     return total;
+
 }
 
 void* ngc_heap::requestObjectCopy(void* addr, bool isInterior)
@@ -1474,8 +1561,8 @@ void* ngc_heap::requestObjectCopy(void* addr, bool isInterior)
         YieldProcessor();
     }
     return obj;
-
 }
+
 void* ngc_heap::updateInteriorObject(void* objAddr, void* addr)
 {
     //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
@@ -1522,8 +1609,6 @@ void* GCHeap::UpdateInterioObject(void* objAddr, void* addr)
 
 unsigned GCHeap::GetGcCount()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    // assert(!"Not Implemented Yet");
     return ngc_heap::gc_count;
 }
 
@@ -1536,9 +1621,7 @@ size_t GCHeap::GarbageCollectGeneration(unsigned int gen, gc_reason reason)
 
 size_t GCHeap::GetTotalBytesInUse()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return 0;
+    return ngc_heap::getTotalBytesInUse();
 }
 
 uint64_t GCHeap::GetTotalAllocatedBytes()
@@ -1548,8 +1631,10 @@ uint64_t GCHeap::GetTotalAllocatedBytes()
 
 int GCHeap::CollectionCount(int generation, int get_bgc_fgc_count)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    // assert(!"Not Implemented Yet");
+    if (generation == 0 && get_bgc_fgc_count)
+    {
+        return GetGcCount();
+    }
     return 0;
 }
 
@@ -1697,8 +1782,6 @@ int GCHeap::EndNoGCRegion()
 
 void GCHeap::PublishObject(uint8_t* Obj)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    // assert(!"Not Implemented Yet");
 }
 
 size_t GCHeap::GetValidSegmentSize(bool large_seg)

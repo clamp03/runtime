@@ -249,7 +249,8 @@ Object* FrozenObjectSegment::TryAllocateObject(PTR_MethodTable type, size_t obje
     }
 
     Object* object = reinterpret_cast<Object*>(m_pCurrent);
-    object->m_pObj = reinterpret_cast<ObjectInternal*>(m_pCurrent + 8);
+    *((uintptr_t*)object + 1) = objectSize;
+    object->m_pObj = reinterpret_cast<ObjectInternal*>(m_pCurrent + 12);
 
     //fprintf(stderr, "[CLAMP] FrozenObjectSegment::TryAllocateObject %p %p Size 0x%zx\n", object, object->m_pObj, objectSize);
     object->SetMethodTable(type);

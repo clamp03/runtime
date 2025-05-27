@@ -18,7 +18,7 @@ inline PTR_VOID Object::UnBox()       // if it is a value class, get the pointer
     _ASSERTE(GetMethodTable()->IsValueType());
     _ASSERTE(!Nullable::IsNullableType(TypeHandle(GetMethodTable())));
 
-    return dac_cast<PTR_BYTE>(this) + sizeof(*this);
+    return dac_cast<PTR_BYTE>(this->m_pObj) + sizeof(*this->m_pObj);
 }
 
 inline DWORD Object::GetNumComponents()
