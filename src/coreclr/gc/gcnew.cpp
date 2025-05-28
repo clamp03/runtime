@@ -114,6 +114,7 @@ CLRCriticalSection ngc_heap::ngc_threads_timeout_cs;
 VOLATILE(BOOL) ngc_heap::ngc_started;
 size_t ngc_heap::gc_count = 0;
 uint64_t time_clock = 0;
+gc_pause_mode pause_mode = pause_interactive;
 //FinalizerWorkItem* ngc_heap::finalizer_work = nullptr;
 
 size_t   MEM_SIZE = 1024 * 1024 * 4;
@@ -1006,9 +1007,8 @@ void ngc_heap::relocate(Object** ppObject, ScanContext* sc,
 
 bool GCHeap::StressHeap(gc_alloc_context * context)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return false;
+    UNREFERENCED_PARAMETER(context);
+    return FALSE;
 }
 
 Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
@@ -1712,16 +1712,17 @@ uint32_t GCHeap::GetMemoryLoad()
 
 int GCHeap::GetGcLatencyMode()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return 0;
+    return pause_mode;
 }
 
 int GCHeap::SetGcLatencyMode(int newLatencyMode)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return 0;
+    if (pause_mode == pause_no_gc)
+    {
+        return (int)set_pause_mode_no_gc;
+    }
+    pause_mode = (gc_pause_mode)newLatencyMode;
+    return (int)set_pause_mode_success;
 }
 
 int GCHeap::GetLOHCompactionMode()
