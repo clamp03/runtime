@@ -128,7 +128,7 @@ struct DispatchStub
 
 private:
     friend struct DispatchHolder;
-    const static int entryPointLen = 12;
+    const static int entryPointLen = 14;
 
     WORD _entryPoint[entryPointLen];
     size_t  _expectedMT;
@@ -233,7 +233,7 @@ struct ResolveStub
 
 private:
     friend struct ResolveHolder;
-    const static int resolveEntryPointLen = 32;
+    const static int resolveEntryPointLen = 36;
     const static int slowEntryPointLen = 4;
     const static int failEntryPointLen = 14;
 
@@ -428,8 +428,9 @@ void VTableCallHolder::Initialize(unsigned slot)
     VTableCallStub* pStub = stub();
     BYTE* p = (BYTE*)(pStub->entryPoint() & ~THUMB_CODE);
 
-    // ldr r12,[r0] : r12 = MethodTable pointer
+    // ldr r12,[r0], ldr r12, [r12] : r12 = MethodTable pointer
     *(UINT32*)p = 0xc000f8d0; p += 4;
+    *(UINT32*)p = 0xc000f8dc; p += 4;
 
     if (offsetOfIndirection > 0xFFF || offsetAfterIndirection > 0xFFF)
     {

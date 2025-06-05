@@ -1699,8 +1699,8 @@ int64_t GCHeap::GetTotalPauseDuration()
 
 void GCHeap::EnumerateConfigurationValues(void* context, ConfigurationValueFunc configurationValueFunc)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
+    fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, context, configurationValueFunc);
+    GCConfig::EnumerateConfigurationValues(context, configurationValueFunc);
 }
 
 uint32_t GCHeap::GetMemoryLoad()

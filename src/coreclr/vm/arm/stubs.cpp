@@ -807,6 +807,9 @@ void  DispatchHolder::Initialize(DispatchHolder* pDispatchHolderRX, PCODE implTa
     _stub._entryPoint[n++] = DISPATCH_STUB_FIRST_WORD;
     _stub._entryPoint[n++] = 0xc000;
 
+    _stub._entryPoint[n++] = 0xf8dc;
+    _stub._entryPoint[n++] = 0xc000;
+
     // push {r5}
     _stub._entryPoint[n++] = 0xb420;
 
@@ -883,6 +886,9 @@ void ResolveHolder::Initialize(ResolveHolder* pResolveHolderRX,
 
     // ldr r12, [r0 + #Object.m_pMethTab]
     _stub._resolveEntryPoint[n++] = RESOLVE_STUB_FIRST_WORD;
+    _stub._resolveEntryPoint[n++] = 0xc000;
+
+    _stub._resolveEntryPoint[n++] = 0xf8dc;
     _stub._resolveEntryPoint[n++] = 0xc000;
 
     // ;; We need two scratch registers, r5 and r6
@@ -980,6 +986,9 @@ void ResolveHolder::Initialize(ResolveHolder* pResolveHolderRX,
 
     // ldr r12, [r0 + #Object.m_pMethTab]
     _stub._resolveEntryPoint[n++] = 0xf8d0;
+    _stub._resolveEntryPoint[n++] = 0xc000;
+
+    _stub._resolveEntryPoint[n++] = 0xf8dc;
     _stub._resolveEntryPoint[n++] = 0xc000;
 
     // b loop
@@ -1446,6 +1455,7 @@ VOID StubLinkerCPU::EmitComputedInstantiatingMethodStub(MethodDesc* pSharedMD, s
                 // Extract MethodTable pointer (the hidden arg) from the object instance.
                 //  ldr regHidden, [r0]
                 ThumbEmitLoadRegIndirect(ThumbReg(regHidden), ThumbReg(0), 0);
+                ThumbEmitLoadRegIndirect(ThumbReg(regHidden), ThumbReg(regHidden), 0); // FEATURE_NEW_GC
             }
         }
         else
@@ -1461,7 +1471,7 @@ VOID StubLinkerCPU::EmitComputedInstantiatingMethodStub(MethodDesc* pSharedMD, s
         // Skip over the MethodTable* to find the address of the unboxed value type.
         //  add r0, #sizeof(MethodTable*)
         ThumbEmitLoadRegIndirect(ThumbReg(0), ThumbReg(0), 0); // FEATURE_NEW_GC
-        ThumbEmitNop();
+        //ThumbEmitNop();
         ThumbEmitIncrement(ThumbReg(0), sizeof(MethodTable*));
     }
 
