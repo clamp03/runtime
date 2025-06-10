@@ -807,8 +807,8 @@ void  DispatchHolder::Initialize(DispatchHolder* pDispatchHolderRX, PCODE implTa
     _stub._entryPoint[n++] = DISPATCH_STUB_FIRST_WORD;
     _stub._entryPoint[n++] = 0xc000;
 
-    _stub._entryPoint[n++] = 0xf8dc;
-    _stub._entryPoint[n++] = 0xc000;
+    //_stub._entryPoint[n++] = 0xf8dc;
+    //_stub._entryPoint[n++] = 0xc000;
 
     // push {r5}
     _stub._entryPoint[n++] = 0xb420;
@@ -888,8 +888,8 @@ void ResolveHolder::Initialize(ResolveHolder* pResolveHolderRX,
     _stub._resolveEntryPoint[n++] = RESOLVE_STUB_FIRST_WORD;
     _stub._resolveEntryPoint[n++] = 0xc000;
 
-    _stub._resolveEntryPoint[n++] = 0xf8dc;
-    _stub._resolveEntryPoint[n++] = 0xc000;
+    //_stub._resolveEntryPoint[n++] = 0xf8dc;
+    //_stub._resolveEntryPoint[n++] = 0xc000;
 
     // ;; We need two scratch registers, r5 and r6
     // push {r5,r6}
@@ -988,8 +988,8 @@ void ResolveHolder::Initialize(ResolveHolder* pResolveHolderRX,
     _stub._resolveEntryPoint[n++] = 0xf8d0;
     _stub._resolveEntryPoint[n++] = 0xc000;
 
-    _stub._resolveEntryPoint[n++] = 0xf8dc;
-    _stub._resolveEntryPoint[n++] = 0xc000;
+    //_stub._resolveEntryPoint[n++] = 0xf8dc;
+    //_stub._resolveEntryPoint[n++] = 0xc000;
 
     // b loop
     offset = (WORD)((loop - (n + 2)) * sizeof(WORD));

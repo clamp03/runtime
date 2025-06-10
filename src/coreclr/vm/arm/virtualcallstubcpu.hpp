@@ -128,7 +128,7 @@ struct DispatchStub
 
 private:
     friend struct DispatchHolder;
-    const static int entryPointLen = 14;
+    const static int entryPointLen = 12;
 
     WORD _entryPoint[entryPointLen];
     size_t  _expectedMT;
@@ -233,7 +233,7 @@ struct ResolveStub
 
 private:
     friend struct ResolveHolder;
-    const static int resolveEntryPointLen = 36;
+    const static int resolveEntryPointLen = 32;
     const static int slowEntryPointLen = 4;
     const static int failEntryPointLen = 14;
 

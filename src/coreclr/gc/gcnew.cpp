@@ -99,6 +99,8 @@ public:
     static VOLATILE(BOOL) ngc_started;
     static GCEvent ngc_done_event;
     static size_t gc_count;
+    static CFinalize* finalize_queue;
+
     //static FinalizerWorkItem* finalizer_work;
 };
 
@@ -115,12 +117,19 @@ VOLATILE(BOOL) ngc_heap::ngc_started;
 size_t ngc_heap::gc_count = 0;
 uint64_t time_clock = 0;
 gc_pause_mode pause_mode = pause_interactive;
+#ifdef FEATURE_PREMORTEM_FINALIZATION
+CFinalize*  ngc_heap::finalize_queue = 0;
+static HRESULT AllocateCFinalize(CFinalize **pCFinalize);
+#endif // FEATURE_PREMORTEM_FINALIZATION
+
 //FinalizerWorkItem* ngc_heap::finalizer_work = nullptr;
 
 size_t   MEM_SIZE = 1024 * 1024 * 4;
 size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
 
 uintptr_t g_gc_copying_address = 0;
+uint32_t yp_spin_count_unit = 0;
+uint32_t original_spin_count_unit = 0;
 
 bool IsInProgress = false;
 bool IsSuspensionPending = false;
@@ -146,6 +155,8 @@ uint64_t GetHighPrecisionTimeStamp()
 #define SPECIAL_HEADER_BITS (0x3)
 #define GC_MARKED       (size_t)0x1
 #define OBJ_BIASED      (size_t)0x2
+
+#define MAX_YP_SPIN_COUNT_UNIT 32768
 
 // gcee.cpp
 void GCHeap::UpdatePreGCCounters()
@@ -342,6 +353,17 @@ HRESULT GCHeap::StaticShutdown()
     fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
     GCScan::GcRuntimeStructuresValid(FALSE);
+    if (ngc_heap::ngc_done_event.IsValid())
+    {
+        ngc_heap::ngc_done_event.CloseEvent();
+    }
+
+#ifdef FEATURE_PREMORTEM_FINALIZATION
+    if (ngc_heap::finalize_queue)
+    {
+        delete ngc_heap::finalize_queue;
+    }
+#endif // FEATURE_PREMORTEM_FINALIZATION
     return S_OK;
 }
 
@@ -355,6 +377,9 @@ HRESULT GCHeap::Initialize()
     qpf = (uint64_t)GCToOSInterface::QueryPerformanceFrequency();
     qpf_ms = 1000.0 / (double)qpf;
     qpf_us = 1000.0 * 1000.0 / (double)qpf;
+    g_num_processors = GCToOSInterface::GetTotalProcessorCount();
+    yp_spin_count_unit = 32 * g_num_processors;
+    original_spin_count_unit = yp_spin_count_unit;
 
     WaitForGCEvent = new (nothrow) GCEvent;
     if (!WaitForGCEvent)
@@ -396,8 +421,14 @@ size_t GCHeap::GetPromotedBytes(int heap_index)
 }
 void GCHeap::SetYieldProcessorScalingFactor(float scalingFactor)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
+    assert (yp_spin_count_unit != 0);
+    uint32_t saved_yp_spin_count_unit = yp_spin_count_unit;
+    yp_spin_count_unit = (uint32_t)((float)original_spin_count_unit * scalingFactor / (float)9);
+    // It's very suspicious if it becomes 0 and also, we don't want to spin too much.
+    if ((yp_spin_count_unit == 0) || (yp_spin_count_unit > MAX_YP_SPIN_COUNT_UNIT))
+    {
+        yp_spin_count_unit = saved_yp_spin_count_unit;
+    }
 }
 
 unsigned int GCHeap::WhichGeneration(Object* object)
@@ -485,6 +516,8 @@ void GCHeap::Promote(Object** ppObject, ScanContext* sc, uint32_t flags)
     fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     assert(!"Not Implemented Yet");
 }
+
+#define free_object_base_size (plug_skew + sizeof(ArrayBase))
 
 class CObjectHeader : public Object
 {
@@ -597,6 +630,7 @@ public:
         assert (GetMethodTable()->ContainsGCPointers());
         return CGCDesc::GetCGCDescFromMT(GetMethodTable());
     }
+#endif
 
     void SetFree(size_t size)
     {
@@ -635,6 +669,8 @@ public:
         check_and_clear_in_free_list ((uint8_t*)m_pObj, size);
 #endif //DOUBLY_LINKED_FL
     }
+
+#if 0
 
     void UnsetFree()
     {
@@ -1059,6 +1095,12 @@ BOOL ngc_heap::init_ngc_heap()
 
     ngc_threads_timeout_cs.Initialize();
     ngc_started = FALSE;
+
+#ifdef FEATURE_PREMORTEM_FINALIZATION
+    HRESULT hr = AllocateCFinalize(&finalize_queue);
+    if (FAILED(hr))
+        return FALSE;
+#endif // FEATURE_PREMORTEM_FINALIZATION
 
     return TRUE;
 }
@@ -1800,9 +1842,7 @@ void GCHeap::SetReservedVMLimit(size_t vmlimit)
 
 Object* GCHeap::GetNextFinalizableObject()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return NULL;
+    return ngc_heap::finalize_queue->GetNextFinalizableObject();
 }
 
 size_t GCHeap::GetNumberFinalizableObjects()
@@ -1821,9 +1861,17 @@ size_t GCHeap::GetFinalizablePromotedCount()
 
 bool GCHeap::RegisterForFinalization(int gen, Object* obj)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return false;
+    if (gen == -1)
+        gen = 0;
+    if (((((CObjectHeader*)obj)->GetHeader()->GetBits()) & BIT_SBLK_FINALIZER_RUN))
+    {
+        ((CObjectHeader*)obj)->GetHeader()->ClrBit(BIT_SBLK_FINALIZER_RUN);
+        return true;
+    }
+    else
+    {
+        return ngc_heap::finalize_queue->RegisterForFinalization (gen, obj);
+    }
 }
 
 void GCHeap::SetFinalizationRun(Object* obj)
@@ -1926,4 +1974,225 @@ int GCHeap::RefreshMemoryLimit()
     assert(!"Not Implemented Yet");
     return 0;
 }
+
+bool CFinalize::Initialize()
+{
+    CONTRACTL {
+        NOTHROW;
+        GC_NOTRIGGER;
+    } CONTRACTL_END;
+
+    const int INITIAL_FINALIZER_ARRAY_SIZE = 100;
+    m_Array = new (nothrow)(Object*[INITIAL_FINALIZER_ARRAY_SIZE]);
+
+    if (!m_Array)
+    {
+        ASSERT (m_Array);
+        STRESS_LOG_OOM_STACK(sizeof(Object*[INITIAL_FINALIZER_ARRAY_SIZE]));
+        if (GCConfig::GetBreakOnOOM())
+        {
+            GCToOSInterface::DebugBreak();
+        }
+        return false;
+    }
+    m_EndArray = &m_Array[INITIAL_FINALIZER_ARRAY_SIZE];
+
+    for (int i =0; i < FreeList; i++)
+    {
+        SegQueueLimit (i) = m_Array;
+    }
+    //m_PromotedCount = 0;
+    lock = -1;
+#ifdef _DEBUG
+    lockowner_threadid.Clear();
+#endif // _DEBUG
+
+    return true;
+}
+
+CFinalize::~CFinalize()
+{
+    delete[] m_Array;
+}
+
+Object* CFinalize::GetNextFinalizableObject(BOOL only_non_critical)
+{
+    Object* obj = 0;
+    EnterFinalizeLock();
+
+    if (!IsSegEmpty(FinalizerListSeg))
+    {
+        obj =  *(--SegQueueLimit (FinalizerListSeg));
+    }
+    else if (!only_non_critical && !IsSegEmpty(CriticalFinalizerListSeg))
+    {
+        //the FinalizerList is empty, we can adjust both
+        // limit instead of moving the object to the free list
+        obj =  *(--SegQueueLimit (CriticalFinalizerListSeg));
+        --SegQueueLimit (FinalizerListSeg);
+    }
+    if (obj)
+    {
+        dprintf (3, ("running finalizer for %p (mt: %p)", obj, method_table (obj)));
+    }
+    LeaveFinalizeLock();
+    return obj;
+}
+
+inline
+void CFinalize::EnterFinalizeLock()
+{
+    _ASSERTE(dbgOnly_IsSpecialEEThread() ||
+             GCToEEInterface::GetThread() == 0 ||
+             GCToEEInterface::IsPreemptiveGCDisabled());
+
+retry:
+    if (Interlocked::CompareExchange(&lock, 0, -1) >= 0)
+    {
+        unsigned int i = 0;
+        while (lock >= 0)
+        {
+            if (g_num_processors > 1)
+            {
+                int spin_count = 128 * yp_spin_count_unit;
+                for (int j = 0; j < spin_count; j++)
+                {
+                    if (lock < 0)
+                        break;
+                    // give the HT neighbor a chance to run
+                    YieldProcessor ();
+                }
+            }
+            if (lock < 0)
+                break;
+            if (++i & 7)
+                GCToOSInterface::YieldThread (0);
+            else
+                GCToOSInterface::Sleep (5);
+        }
+        goto retry;
+    }
+
+#ifdef _DEBUG
+    lockowner_threadid.SetToCurrentThread();
+#endif // _DEBUG
+}
+
+inline
+void CFinalize::LeaveFinalizeLock()
+{
+    _ASSERTE(dbgOnly_IsSpecialEEThread() ||
+             GCToEEInterface::GetThread() == 0 ||
+             GCToEEInterface::IsPreemptiveGCDisabled());
+
+#ifdef _DEBUG
+    lockowner_threadid.Clear();
+#endif // _DEBUG
+    lock = -1;
+}
+
+BOOL
+CFinalize::GrowArray()
+{
+    size_t oldArraySize = (m_EndArray - m_Array);
+    size_t newArraySize =  (size_t)(((float)oldArraySize / 10) * 12);
+
+    Object** newArray = new (nothrow) Object*[newArraySize];
+    if (!newArray)
+    {
+        return FALSE;
+    }
+    memcpy (newArray, m_Array, oldArraySize*sizeof(Object*));
+
+    dprintf (3, ("Grow finalizer array [%p,%p[ -> [%p,%p[", m_Array, m_EndArray, newArray, &m_Array[newArraySize]));
+
+    //adjust the fill pointers
+    for (int i = 0; i < FreeList; i++)
+    {
+        m_FillPointers [i] += (newArray - m_Array);
+    }
+    delete[] m_Array;
+    m_Array = newArray;
+    m_EndArray = &m_Array [newArraySize];
+
+    return TRUE;
+}
+
+bool
+CFinalize::RegisterForFinalization (int gen, Object* obj, size_t size)
+{
+    CONTRACTL {
+        NOTHROW;
+        GC_NOTRIGGER;
+    } CONTRACTL_END;
+
+    EnterFinalizeLock();
+
+    // Adjust gen
+    unsigned int dest = 0; //gen_segment (gen);
+
+    // Adjust boundary for segments so that GC will keep objects alive.
+    Object*** s_i = &SegQueue (FreeListSeg);
+    if ((*s_i) == SegQueueLimit(FreeListSeg))
+    {
+        if (!GrowArray())
+        {
+            LeaveFinalizeLock();
+            if (method_table(obj) == NULL)
+            {
+                // If the object is uninitialized, a valid size should have been passed.
+                assert (size >= Align (min_obj_size));
+                dprintf (3, (ThreadStressLog::gcMakeUnusedArrayMsg(), (size_t)obj, (size_t)(obj+size)));
+                ((CObjectHeader*)obj)->SetFree(size);
+            }
+            STRESS_LOG_OOM_STACK(0);
+            if (GCConfig::GetBreakOnOOM())
+            {
+                GCToOSInterface::DebugBreak();
+            }
+            return false;
+        }
+    }
+
+    Object*** end_si = &SegQueueLimit (dest);
+    do
+    {
+        //is the segment empty?
+        if (!(*s_i == *(s_i-1)))
+        {
+            //no, move the first element of the segment to the (new) last location in the segment
+            *(*s_i) = *(*(s_i-1));
+        }
+        //increment the fill pointer
+        (*s_i)++;
+        //go to the next segment.
+        s_i--;
+    } while (s_i > end_si);
+
+    // We have reached the destination segment
+    // store the object
+    **s_i = obj;
+    // increment the fill pointer
+    (*s_i)++;
+
+    LeaveFinalizeLock();
+
+    return true;
+}
+
+
+
+#ifdef FEATURE_PREMORTEM_FINALIZATION
+static
+HRESULT AllocateCFinalize(CFinalize **pCFinalize)
+{
+    *pCFinalize = new (nothrow) CFinalize();
+    if (*pCFinalize == NULL || !(*pCFinalize)->Initialize())
+        return E_OUTOFMEMORY;
+
+    return S_OK;
+}
+#endif // FEATURE_PREMORTEM_FINALIZATION
+
+
 }
