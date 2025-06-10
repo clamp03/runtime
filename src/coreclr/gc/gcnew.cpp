@@ -1168,6 +1168,7 @@ void ngc_heap::ngc_mark_phase()
 
     GCScan::GcScanRoots(ngc_heap::mark, 0, 0, &sc);
     GCScan::GcScanHandles(ngc_heap::mark, 0, 0, &sc);
+    finalize_queue->CFinalize::GcScanRoots(ngc_heap::mark, 0, &sc);
 
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
     GCToEEInterface::RestartEE(TRUE);
@@ -1275,6 +1276,7 @@ void ngc_heap::ngc_reloc_phase()
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
     GCScan::GcScanRoots(ngc_heap::relocate, 0, 0, &sc);
     GCScan::GcScanHandles(ngc_heap::relocate, 0, 0, &sc);
+    finalize_queue->CFinalize::GcScanRoots(ngc_heap::relocate, 0, &sc);
 
     free(OLD_MEM);
     OLD_MEM = NULL;
@@ -1769,15 +1771,12 @@ int GCHeap::SetGcLatencyMode(int newLatencyMode)
 
 int GCHeap::GetLOHCompactionMode()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return 0;
+    return loh_compaction_default;
 }
 
 void GCHeap::SetLOHCompactionMode(int newLOHCompactionMode)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
+    // NO FEATURE_LOH_COMPACTION
 }
 
 bool GCHeap::RegisterForFullGCNotification(uint32_t gen2Percentage,
@@ -2180,7 +2179,28 @@ CFinalize::RegisterForFinalization (int gen, Object* obj, size_t size)
     return true;
 }
 
+void
+CFinalize::GcScanRoots (promote_func* fn, int hn, ScanContext *pSC)
+{
+    ScanContext sc;
+    if (pSC == 0)
+        pSC = &sc;
 
+    pSC->thread_number = hn;
+
+    //scan the finalization queue
+    Object** startIndex  = SegQueue (FinalizerStartSeg);
+    Object** stopIndex  = SegQueueLimit (FinalizerMaxSeg);
+
+    for (Object** po = startIndex; po < stopIndex; po++)
+    {
+        Object* o = *po;
+        //dprintf (3, ("scan freacheable %zx", (size_t)o));
+        dprintf (3, ("scan f %zx", (size_t)o));
+
+        (*fn)(po, pSC, 0);
+    }
+}
 
 #ifdef FEATURE_PREMORTEM_FINALIZATION
 static
