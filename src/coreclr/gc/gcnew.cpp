@@ -100,6 +100,7 @@ public:
     static GCEvent ngc_done_event;
     static size_t gc_count;
     static CFinalize* finalize_queue;
+    static uint64_t total_suspended_time;
 
     //static FinalizerWorkItem* finalizer_work;
 };
@@ -115,6 +116,8 @@ size_t  ngc_heap::IND_CURR = 0;
 CLRCriticalSection ngc_heap::ngc_threads_timeout_cs;
 VOLATILE(BOOL) ngc_heap::ngc_started;
 size_t ngc_heap::gc_count = 0;
+uint64_t ngc_heap::total_suspended_time = 0;
+
 uint64_t time_clock = 0;
 gc_pause_mode pause_mode = pause_interactive;
 #ifdef FEATURE_PREMORTEM_FINALIZATION
@@ -1108,12 +1111,14 @@ BOOL ngc_heap::prepare_ngc_thread()
 
     if (!ngc_thread_running)
     {
+        uint64_t start = GetHighPrecisionTimeStamp();
         GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
         if (create_ngc_thread_support() && create_ngc_thread())
         {
             ngc_thread_running = TRUE;
             success = TRUE;
         }
+        total_suspended_time += GetHighPrecisionTimeStamp() - start;
         GCToEEInterface::RestartEE(TRUE);
     }
     ngc_threads_timeout_cs.Leave();
@@ -1122,6 +1127,7 @@ BOOL ngc_heap::prepare_ngc_thread()
 
 void ngc_heap::ngc_mark_phase()
 {
+    uint64_t start = GetHighPrecisionTimeStamp();
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
 
     OLD_MEM = MEM;
@@ -1167,6 +1173,8 @@ void ngc_heap::ngc_mark_phase()
     finalize_queue->CFinalize::GcScanRoots(ngc_heap::mark, 0, &sc);
 
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
+
+    total_suspended_time += GetHighPrecisionTimeStamp() - start;
     GCToEEInterface::RestartEE(TRUE);
 }
 
@@ -1268,6 +1276,7 @@ void ngc_heap::ngc_reloc_phase()
     sc.promotion = FALSE;
     sc.concurrent = FALSE;
     sc.stack_limit = 0;
+    uint64_t start = GetHighPrecisionTimeStamp();
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
     GCScan::GcScanRoots(ngc_heap::relocate, 0, 0, &sc);
@@ -1280,6 +1289,7 @@ void ngc_heap::ngc_reloc_phase()
     free(IND_LIST);
     IND_CURR = 0;
     IND_LIST = nullptr;
+    total_suspended_time += GetHighPrecisionTimeStamp() - start;
     GCToEEInterface::RestartEE(TRUE);
 }
 
@@ -1732,9 +1742,7 @@ void GCHeap::GetMemoryInfo(uint64_t* highMemLoadThresholdBytes,
 
 int64_t GCHeap::GetTotalPauseDuration()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return 0;
+    return (int64_t)(ngc_heap::total_suspended_time * 10);
 }
 
 void GCHeap::EnumerateConfigurationValues(void* context, ConfigurationValueFunc configurationValueFunc)
