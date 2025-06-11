@@ -200,9 +200,7 @@ size_t GCHeap::GetCurrentObjSize()
 
 size_t GCHeap::GetLastGCStartTime(int generation)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return 0;
+    return (size_t)(time_clock / 1000);
 }
 
 size_t GCHeap::GetLastGCDuration(int generation)
@@ -214,9 +212,7 @@ size_t GCHeap::GetLastGCDuration(int generation)
 
 size_t GCHeap::GetNow()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
-    return 0;
+    return (size_t)(GetHighPrecisionTimeStamp() / 1000);
 }
 
 bool GCHeap::IsGCInProgressHelper(bool bConsiderGCStart)
