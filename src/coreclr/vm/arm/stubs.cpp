@@ -807,8 +807,8 @@ void  DispatchHolder::Initialize(DispatchHolder* pDispatchHolderRX, PCODE implTa
     _stub._entryPoint[n++] = DISPATCH_STUB_FIRST_WORD;
     _stub._entryPoint[n++] = 0xc000;
 
-    //_stub._entryPoint[n++] = 0xf8dc;
-    //_stub._entryPoint[n++] = 0xc000;
+    _stub._entryPoint[n++] = 0xf8dc;
+    _stub._entryPoint[n++] = 0xc000;
 
     // push {r5}
     _stub._entryPoint[n++] = 0xb420;
@@ -839,6 +839,8 @@ void  DispatchHolder::Initialize(DispatchHolder* pDispatchHolderRX, PCODE implTa
     _stub._entryPoint[n++] = 0xf000 | offset;
 
     // nop - insert padding
+    _stub._entryPoint[n++] = 0xbf00;
+    _stub._entryPoint[n++] = 0xbf00;
     _stub._entryPoint[n++] = 0xbf00;
 
     _ASSERTE(n == DispatchStub::entryPointLen);
@@ -1228,7 +1230,6 @@ VOID StubLinkerCPU::EmitShuffleThunk(ShuffleEntry *pShuffleEntryArray)
         // field and stash it in r12.
         //  ldr r12, [r0, #offsetof(DelegateObject, _methodPtrAux)]
         ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(0), 0); // FEATURE_NEW_GC
-        ThumbEmitNop();
         ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(12), DelegateObject::GetOffsetOfMethodPtrAux());
         //ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(0), DelegateObject::GetOffsetOfMethodPtrAux());
 
@@ -1288,7 +1289,7 @@ VOID StubLinkerCPU::EmitShuffleThunk(ShuffleEntry *pShuffleEntryArray)
     // On entry r0 holds the delegate instance. Look up the real target address stored in the MethodPtrAux
     // field and stash it in r12.
     //  ldr r12, [r0, #offsetof(DelegateObject, _methodPtrAux)]
-    ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(0), 0);
+    ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(0), 0); // FEATURE_NEW_GC
     ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(12), DelegateObject::GetOffsetOfMethodPtrAux());
     // ThumbEmitLoadRegIndirect(ThumbReg(12), ThumbReg(0), DelegateObject::GetOffsetOfMethodPtrAux());
 
