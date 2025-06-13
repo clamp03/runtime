@@ -1956,14 +1956,10 @@ HRESULT GCHeap::WaitUntilConcurrentGCCompleteAsync(int millisecondsTimeout)
 
 void GCHeap::TemporaryEnableConcurrentGC()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
 }
 
 void GCHeap::TemporaryDisableConcurrentGC()
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
 }
 
 bool GCHeap::IsConcurrentGCEnabled()
