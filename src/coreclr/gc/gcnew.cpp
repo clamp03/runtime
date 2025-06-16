@@ -1235,13 +1235,22 @@ void ngc_heap::ngc_copy_phase()
         //fprintf(stderr, "[CLAMP] %s %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, i, IND_CURR, OLD_MEM->count);
         size_t oldBiased = info & OBJ_BIASED;
         size_t offset = Interlocked::ExchangeAdd(&MEM->curr, size);
-        assert(offset + size < MEM->size);
+        //fprintf(stderr, "[CLAMP] %s %d %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, offset ,size, MEM->size);
+#if 1
         if (offset + size >= MEM->size)
         {
             int allocSize = MEM_SIZE;
             void* allocated = malloc(allocSize + 16);
-            allocated = memset(allocated, 0, allocSize + 16);
+            heap_region* NEW_MEM = (heap_region*)memset(allocated, 0, allocSize + 16);
+            NEW_MEM->curr = 0;
+            NEW_MEM->size = MEM_SIZE;
+            NEW_MEM->next = MEM;
+            Interlocked::Exchange(&MEM, NEW_MEM);
+            assert(MEM == NEW_MEM);
+            offset = Interlocked::ExchangeAdd(&MEM->curr, size);
+            assert(offset + size < MEM->size);
         }
+#endif
         Interlocked::ExchangeAdd(&MEM->count, (size_t)1);
 
         uint8_t** newAddr = (uint8_t**)MEM->getAddr(offset);
@@ -1256,7 +1265,8 @@ void ngc_heap::ngc_copy_phase()
         uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
         *newAddr = newObj;
 
-        memcpy(newObj - 4, *oldAddr - 4, size - 4 - 4);
+        // fprintf(stderr, "[CLAMP] %s %d %p %p %p %p %zu\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, newAddr, newObj, size);
+        memcpy(newObj - 4, *oldAddr - 4, size - 4 - 4 - (newBiased ? 4 : 0));
         *oldAddr = newObj;
 
         *((uintptr_t*)oldAddr + 1) = (uintptr_t)newAddr | biasToggle;
@@ -1506,9 +1516,10 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
     {
         // // fprintf(stderr, "[CLAMP] ObjHeader Size %d\n", sizeof(ObjHeader));
         size_t offset;
-        heap_region* mem = MEM;
+        heap_region* mem = nullptr;
         while (true)
         {
+            mem = MEM;
             offset = Interlocked::ExchangeAdd(&mem->curr, size);
             if (offset + size >= mem->size)
             {
@@ -1539,7 +1550,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, ret, obj, size);
         *(uintptr_t*)ret = (uintptr_t)obj;
         *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
-        //fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, offset);
+        // fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p %p Size 0x%zx CURR: 0x%zx %p\n", ret, *(uintptr_t**)ret, obj, size, offset, ((Object*)ret)->m_pObj);
 
         return (Object*)ret;
     }
