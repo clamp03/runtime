@@ -9516,7 +9516,7 @@ void Compiler::impImportBlockCode(BasicBlock* block)
                 }
 #ifdef FEATURE_NEW_GC
 #if 1
-                if (obj != nullptr)
+                if (obj != nullptr && obj->TypeIs(TYP_REF))
                 {
                     GenTreeCall* helperCall = gtNewHelperCallNode(CORINFO_HELP_NGC_OBJ_BARRIER, TYP_VOID, gtCloneExpr(obj));
                     impAppendTree(helperCall, CHECK_SPILL_ALL, impCurStmtDI);

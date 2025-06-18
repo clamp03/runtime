@@ -1139,6 +1139,7 @@ void ngc_heap::ngc_mark_phase()
     MEM->curr = 0;
     MEM->next = OLD_MEM->next;
     OLD_MEM->next = nullptr;
+    // fprintf(stderr, "[CLAMP] ALLOC MARK %p %p %d\n", MEM, MEM->getEndAddr(), allocSize);
     assert((uint8_t*)allocated + 16 == (uint8_t*)MEM->getAddr());
 
     ScanContext sc;
@@ -1249,6 +1250,7 @@ void ngc_heap::ngc_copy_phase()
             assert(MEM == NEW_MEM);
             offset = Interlocked::ExchangeAdd(&MEM->curr, size);
             assert(offset + size < MEM->size);
+            // fprintf(stderr, "[CLAMP] ALLOC COPY %p %p %d\n", MEM, MEM->getEndAddr(), allocSize);
         }
 #endif
         Interlocked::ExchangeAdd(&MEM->count, (size_t)1);
@@ -1265,7 +1267,8 @@ void ngc_heap::ngc_copy_phase()
         uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
         *newAddr = newObj;
 
-        // fprintf(stderr, "[CLAMP] %s %d %p %p %p %p %zu\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, newAddr, newObj, size);
+        //fprintf(stderr, "[CLAMP] %s %d %p %p %p %p %zu %d\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, newAddr, newObj, size, updateChk);
+        assert(size > 12);
         memcpy(newObj - 4, *oldAddr - 4, size - 4 - 4 - (newBiased ? 4 : 0));
         *oldAddr = newObj;
 
@@ -1317,12 +1320,12 @@ void ngc_heap::ngc()
 {
     gc_count += 1;
     ngc_started = TRUE;
-    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    // fprintf(stderr, "[CLAMP] START GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     ngc_mark_phase();
     //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     ngc_copy_phase();
-    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     ngc_reloc_phase();
+    // fprintf(stderr, "[CLAMP] DONE GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     ngc_started = FALSE;
 }
 
@@ -1550,7 +1553,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, ret, obj, size);
         *(uintptr_t*)ret = (uintptr_t)obj;
         *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
-        // fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p %p Size 0x%zx CURR: 0x%zx %p\n", ret, *(uintptr_t**)ret, obj, size, offset, ((Object*)ret)->m_pObj);
+        //fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p %p Size 0x%zx CURR: 0x%zx %p\n", ret, *(uintptr_t**)ret, obj, size, offset, ((Object*)ret)->m_pObj);
 
         return (Object*)ret;
     }
@@ -1601,7 +1604,6 @@ void* ngc_heap::requestObjectCopy(void* addr, bool isInterior)
     if (isInterior)
     {
         obj = findObjectAddress(obj);
-        // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, addr, obj);
     }
 
     if (!OLD_MEM->isInHeapRegion(*obj))
@@ -1609,6 +1611,7 @@ void* ngc_heap::requestObjectCopy(void* addr, bool isInterior)
         return nullptr;
     }
 
+    //fprintf(stderr, "[CLAMP] %s %d %p %p %p %p %d\n", __PRETTY_FUNCTION__, __LINE__, addr, obj, OLD_MEM, OLD_MEM->getEndAddr(), isInterior);
     uintptr_t temp = 0;
     do
     {
@@ -1758,7 +1761,7 @@ int64_t GCHeap::GetTotalPauseDuration()
 
 void GCHeap::EnumerateConfigurationValues(void* context, ConfigurationValueFunc configurationValueFunc)
 {
-    fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, context, configurationValueFunc);
+    // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, context, configurationValueFunc);
     GCConfig::EnumerateConfigurationValues(context, configurationValueFunc);
 }
 
