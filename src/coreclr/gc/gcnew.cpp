@@ -127,7 +127,10 @@ static HRESULT AllocateCFinalize(CFinalize **pCFinalize);
 
 //FinalizerWorkItem* ngc_heap::finalizer_work = nullptr;
 
-size_t   MEM_SIZE = 1024 * 1024 * 4;
+size_t   DEFAULT_MEM_SIZE = 1024 * 1024 * 4;
+size_t   MAX_MEM_SIZE = DEFAULT_MEM_SIZE * 16;
+size_t   MIN_MEM_SIZE = DEFAULT_MEM_SIZE;
+size_t   MEM_SIZE = DEFAULT_MEM_SIZE;
 size_t   PINNED_MEM_SIZE = 1024 * 1024 * 10;
 
 uintptr_t g_gc_copying_address = 0;
@@ -143,6 +146,8 @@ GCEvent ngc_start_event;
 GCEvent ngc_heap::ngc_done_event;
 
 GCEvent *GCHeap::WaitForGCEvent         = NULL;
+
+heap_segment * frozen_seg = NULL;
 
 uint64_t qpf;
 double qpf_ms;
@@ -285,20 +290,76 @@ void GCHeap::DiagDescrGenerations(gen_walk_fn fn, void *context)
 
 segment_handle GCHeap::RegisterFrozenSegment(segment_info *pseginfo)
 {
-    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    // assert(!"Not Implemented Yet");
+#ifdef FEATURE_BASICFREEZE
+    heap_segment * seg = new (nothrow) heap_segment;
+    if (!seg)
+    {
+        return NULL;
+    }
+
+    uint8_t* base_mem = (uint8_t*)pseginfo->pvMem;
+    heap_segment_mem(seg) = base_mem + pseginfo->ibFirstObject;
+    heap_segment_allocated(seg) = base_mem + pseginfo->ibAllocated;
+    heap_segment_committed(seg) = base_mem + pseginfo->ibCommit;
+    heap_segment_reserved(seg) = base_mem + pseginfo->ibReserved;
+    heap_segment_next(seg) = frozen_seg;
+    heap_segment_used(seg) = heap_segment_allocated(seg);
+    heap_segment_plan_allocated(seg) = 0;
+#ifdef USE_REGIONS
+    heap_segment_gen_num(seg) = max_generation;
+#endif //USE_REGIONS
+    seg->flags = heap_segment_flags_readonly;
+
+    frozen_seg = seg;
+    return reinterpret_cast< segment_handle >(seg);
+#else
+    assert(!"Should not call GCHeap::RegisterFrozenSegment without FEATURE_BASICFREEZE defined!");
     return NULL;
+#endif // FEATURE_BASICFREEZE
 }
 
 void GCHeap::UnregisterFrozenSegment(segment_handle seg)
 {
-    fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    assert(!"Not Implemented Yet");
+    heap_segment* hseg = reinterpret_cast<heap_segment*>(seg);
+    if (hseg == nullptr) return;
+    if (frozen_seg == hseg)
+    {
+        delete hseg;
+        frozen_seg = heap_segment_next(frozen_seg);
+        return;
+    }
+
+    heap_segment* fseg = frozen_seg;
+    while (fseg)
+    {
+        if (heap_segment_next(fseg) == hseg)
+        {
+            heap_segment_next(fseg) = heap_segment_next(heap_segment_next(fseg));
+            delete hseg;
+            return;
+        }
+        fseg = heap_segment_next(fseg);
+    }
 }
 
 bool GCHeap::IsInFrozenSegment(Object *object)
 {
-    return false;
+    heap_segment* fseg = frozen_seg;
+    uint8_t* addr = (uint8_t*)object;
+    while (fseg)
+    {
+        if (addr >= heap_segment_mem(fseg) && addr < heap_segment_allocated(fseg))
+        {
+            return TRUE;
+        }
+        fseg = heap_segment_next(fseg);
+    }
+    if (ngc_heap::isHeapPointer((void*)object, false) == FALSE)
+    {
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 void GCHeap::UpdateFrozenSegment(segment_handle seg, uint8_t* allocated, uint8_t* committed)
@@ -1135,6 +1196,12 @@ void ngc_heap::ngc_mark_phase()
     int allocSize = MEM_SIZE;
     void* allocated = malloc(allocSize + 16);
     MEM = (heap_region*)memset(allocated, 0, allocSize + 16);
+    if (MEM == nullptr)
+    {
+        OLD_MEM = nullptr;
+        GCToEEInterface::RestartEE(TRUE);
+        return;
+    }
     MEM->size = allocSize;
     MEM->curr = 0;
     MEM->next = OLD_MEM->next;
@@ -1152,6 +1219,7 @@ void ngc_heap::ngc_mark_phase()
     size_t idx = 0;
     IND_CURR = 0;
     IND_LIST = (size_t*)malloc(4 * OLD_MEM->count + 4);
+    assert(IND_LIST);
     while (idx < OLD_MEM->curr)
     {
         uint8_t** oldAddr = (uint8_t**)(OLD_MEM->getAddr(idx));
@@ -1176,15 +1244,19 @@ void ngc_heap::ngc_mark_phase()
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
 
     total_suspended_time += GetHighPrecisionTimeStamp() - start;
+    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     GCToEEInterface::RestartEE(TRUE);
 }
 
 void ngc_heap::ngc_copy_phase()
 {
+    if (MEM == nullptr) return;
+    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     size_t idx = 0;
     size_t total = 0;
     IND_CURR = 0;
     heap_region* mem = ngc_heap::OLD_MEM;
+    assert(IND_LIST);
     while (idx < mem->curr)
     {
         uint8_t** oldAddr = (uint8_t**)(mem->getAddr(idx));
@@ -1202,7 +1274,7 @@ void ngc_heap::ngc_copy_phase()
     int i = 0;
     while (i < IND_CURR)
     {
-        if ((i % 10) == 0) GCToOSInterface::Sleep(5);
+        //if ((i % 10) == 0) GCToOSInterface::Sleep(5);
 
         bool updateChk = false;
         uint8_t** oldAddr = (uint8_t**)VolatileLoad(&g_gc_copying_address);
@@ -1243,6 +1315,11 @@ void ngc_heap::ngc_copy_phase()
             int allocSize = MEM_SIZE;
             void* allocated = malloc(allocSize + 16);
             heap_region* NEW_MEM = (heap_region*)memset(allocated, 0, allocSize + 16);
+            if (NEW_MEM == nullptr)
+            {
+                MEM = nullptr;
+                return;
+            }
             NEW_MEM->curr = 0;
             NEW_MEM->size = MEM_SIZE;
             NEW_MEM->next = MEM;
@@ -1283,6 +1360,7 @@ void ngc_heap::ngc_copy_phase()
 
 void ngc_heap::ngc_reloc_phase()
 {
+    if (MEM == nullptr) return;
     ScanContext sc;
     sc.thread_number = 0;
     sc.thread_count = 1;
@@ -1291,6 +1369,7 @@ void ngc_heap::ngc_reloc_phase()
     sc.stack_limit = 0;
     uint64_t start = GetHighPrecisionTimeStamp();
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    int prevSize = OLD_MEM->curr;
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
     GCScan::GcScanRoots(ngc_heap::relocate, 0, 0, &sc);
     GCScan::GcScanHandles(ngc_heap::relocate, 0, 0, &sc);
@@ -1299,10 +1378,41 @@ void ngc_heap::ngc_reloc_phase()
     free(OLD_MEM);
     OLD_MEM = NULL;
 
+    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     free(IND_LIST);
     IND_CURR = 0;
     IND_LIST = nullptr;
     total_suspended_time += GetHighPrecisionTimeStamp() - start;
+
+    if (MEM->curr + 1024 > prevSize)
+    {
+        int allocSize = MEM_SIZE;
+        void* allocated = malloc(MEM_SIZE + 16);
+
+        if (allocated == nullptr)
+        {
+            MEM = nullptr;
+            GCToEEInterface::RestartEE(TRUE);
+            return;
+        }
+
+        heap_region * NEW_MEM = (heap_region*)memset(allocated, 0, MEM_SIZE + 16);
+        NEW_MEM->size = allocSize;
+        NEW_MEM->curr = 0;
+        NEW_MEM->next = MEM;
+        MEM = NEW_MEM;
+    }
+    else if (MEM->curr * 1.3 > prevSize)
+    {
+        MEM_SIZE += DEFAULT_MEM_SIZE;
+    }
+    else if (MEM->curr < prevSize / 3)
+    {
+        MEM_SIZE /= 2;
+    }
+    if (MEM_SIZE > MAX_MEM_SIZE) MEM_SIZE = MAX_MEM_SIZE;
+    if (MEM_SIZE < MIN_MEM_SIZE) MEM_SIZE = MIN_MEM_SIZE;
+
     GCToEEInterface::RestartEE(TRUE);
 }
 
@@ -1319,13 +1429,21 @@ void ngc_heap::garbage_collect()
 void ngc_heap::ngc()
 {
     gc_count += 1;
+    if (MEM == nullptr || MEM->curr * 16 < MEM_SIZE)
+    {
+        return;
+    }
     ngc_started = TRUE;
     // fprintf(stderr, "[CLAMP] START GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     ngc_mark_phase();
     //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     ngc_copy_phase();
+    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     ngc_reloc_phase();
     // fprintf(stderr, "[CLAMP] DONE GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     ngc_started = FALSE;
 }
 
@@ -1430,17 +1548,24 @@ Object* ngc_heap::loh_alloc(gc_alloc_context* context, size_t size, uint32_t fla
     {
         size += 4;
     }
-    heap_region* allocated = (heap_region*)malloc(size + 16);
+    void* allocated = malloc(size + 16);
+    if (allocated == NULL)
+    {
+        LOH_MEM = nullptr;
+        return nullptr;
+    }
+    heap_region* mem = (heap_region*)memset(allocated, 0, size);
+
     do
     {
-        allocated->next = LOH_MEM;
+        mem->next = LOH_MEM;
     }
-    while(Interlocked::CompareExchange(&LOH_MEM, allocated, allocated->next) != allocated->next);
+    while(Interlocked::CompareExchange(&LOH_MEM, mem, mem->next) != mem->next);
 
-    allocated->curr = size;
-    allocated->size = size;
-    allocated->count = 1;
-    uint8_t* ret = (uint8_t*)&allocated->mem;
+    mem->curr = size;
+    mem->size = size;
+    mem->count = 1;
+    uint8_t* ret = (uint8_t*)&mem->mem;
     uint8_t* obj = ret + Align(sizeof(ObjHeader) + 4 + 4); // ObjHeader + m_pObj pointer + next pointer
     uint8_t bias = 0;
     if (flags & GC_ALLOC_ALIGN8 && ((size_t) obj & 7) != 0)
@@ -1461,6 +1586,7 @@ Object* ngc_heap::loh_alloc(gc_alloc_context* context, size_t size, uint32_t fla
 
 Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
+    if (MEM == nullptr) return nullptr;
     /*
     static int counter = 0;
     counter += 1;
@@ -1523,6 +1649,10 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         while (true)
         {
             mem = MEM;
+            if (MEM == nullptr)
+            {
+                return nullptr;
+            }
             offset = Interlocked::ExchangeAdd(&mem->curr, size);
             if (offset + size >= mem->size)
             {
@@ -1695,11 +1825,7 @@ uint64_t GCHeap::GetTotalAllocatedBytes()
 
 int GCHeap::CollectionCount(int generation, int get_bgc_fgc_count)
 {
-    if (generation == 0 && get_bgc_fgc_count)
-    {
-        return GetGcCount();
-    }
-    return 0;
+    return GetGcCount();
 }
 
 size_t GCHeap::ApproxTotalBytesInUse(BOOL small_heap_only)
