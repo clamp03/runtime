@@ -922,12 +922,13 @@ uint8_t** ngc_heap::findObjectAddress(uint8_t** addr)
     size_t start = 0;
     size_t end = IND_CURR;
     size_t poAddr = (size_t)addr;
+    //fprintf(stderr, "[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM, IND_CURR, IND_LIST);
     while (start < end)
     {
         size_t mid = (start + end) / 2;
 
         uint8_t** midAddr = (uint8_t**)OLD_MEM->getAddr(IND_LIST[mid]);
-        // fprintf(stderr, "[CLAMP] %s %d %p %p %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, mid, start, end);
+        //fprintf(stderr, "[CLAMP] %s %d %p %p %d %d %d\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, mid, start, end);
         if ((uintptr_t)midAddr > (uintptr_t)poAddr)
         {
             end = mid;
@@ -935,10 +936,10 @@ uint8_t** ngc_heap::findObjectAddress(uint8_t** addr)
         else
         {
             uintptr_t nextAddr = (uintptr_t)(OLD_MEM->getAddr(IND_LIST[mid + 1]));
-            // fprintf(stderr, "[CLAMP] %s %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, (void*)nextAddr);
+            //fprintf(stderr, "[CLAMP] %s %d %p %p %p\n", __PRETTY_FUNCTION__, __LINE__, midAddr, addr, (void*)nextAddr);
             if (poAddr < nextAddr)
             {
-                // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, midAddr, nextAddr);
+                //fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, addr, midAddr, nextAddr);
                 return midAddr;
 #if 0
                 if ((uintptr_t)*midAddr >= (uintptr_t)OLD_MEM && (uintptr_t)*midAddr < (uintptr_t)OLD_MEM + OLD_MEM_CURR)
@@ -1245,7 +1246,6 @@ void ngc_heap::ngc_mark_phase()
 
     total_suspended_time += GetHighPrecisionTimeStamp() - start;
     //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
-    GCToEEInterface::RestartEE(TRUE);
 }
 
 void ngc_heap::ngc_copy_phase()
@@ -1253,7 +1253,6 @@ void ngc_heap::ngc_copy_phase()
     if (MEM == nullptr) return;
     //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     size_t idx = 0;
-    size_t total = 0;
     IND_CURR = 0;
     heap_region* mem = ngc_heap::OLD_MEM;
     assert(IND_LIST);
@@ -1266,10 +1265,10 @@ void ngc_heap::ngc_copy_phase()
         {
             IND_LIST[IND_CURR++] = idx;
         }
-        total += 1;
         idx += size;
     }
     IND_LIST[IND_CURR] = mem->curr;
+    GCToEEInterface::RestartEE(TRUE);
 
     int i = 0;
     while (i < IND_CURR)
@@ -1725,6 +1724,8 @@ void* ngc_heap::requestObjectCopy(void* addr, bool isInterior)
     {
         return nullptr;
     }
+
+    // fprintf(stderr, "[CLAMP] %s %d %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM, IND_CURR, IND_LIST);
     if (VolatileLoad(&g_gc_copying_address) == 0 || !OLD_MEM->isInHeapRegion(addr))
     {
         return nullptr;
