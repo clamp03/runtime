@@ -2722,6 +2722,10 @@ void CodeGen::genCodeForInitBlkUnroll(GenTreeBlk* node)
 #endif // TARGET_ARM64
 
 #ifdef TARGET_ARM
+    if (/*dstAddr->TypeGet() == TYP_REF || */(dstAddr->OperIsAddrMode() && dstAddr->AsAddrMode()->Base()->TypeGet() == TYP_REF)) // FEATURE_NEW_GC
+    {
+        emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, dstAddrBaseReg, dstAddrBaseReg);
+    }
     const regNumber srcReg = genConsumeReg(src);
 
     for (unsigned regSize = REGSIZE_BYTES; size > 0; size -= regSize, dstOffset += regSize)
@@ -3046,7 +3050,6 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* node)
 #endif // TARGET_ARM64
 
 #ifdef TARGET_ARM
-
     if (src->OperIs(GT_IND))
     {
         GenTree* srcAddr = src->AsIndir()->Addr();
@@ -3060,7 +3063,7 @@ void CodeGen::genCodeForCpBlkUnroll(GenTreeBlk* node)
     const regNumber tempReg = internalRegisters.Extract(node, RBM_ALLINT);
 
     regNumber newGcReg = internalRegisters.Extract(node, RBM_ALLINT);
-    if (dstAddr->TypeGet() == TYP_REF || (dstAddr->OperIsAddrMode() && dstAddr->AsAddrMode()->HasBase() && dstAddr->AsAddrMode()->Base()->TypeGet() == TYP_REF)) // FEATURE_NEW_GC
+    if (dstAddr->TypeGet() == TYP_REF || (dstAddr->OperIsAddrMode() && dstAddr->AsAddrMode()->Base()->TypeGet() == TYP_REF)) // FEATURE_NEW_GC
     {
         emit->emitIns_R_R(INS_ldr, EA_PTRSIZE, newGcReg, dstAddrBaseReg);
     }

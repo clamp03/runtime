@@ -1343,7 +1343,7 @@ void ngc_heap::ngc_copy_phase()
         uint8_t* newObj = (uint8_t*)((uintptr_t)newAddr + sizeof(ObjHeader) + 4 + 4 + (newBiased ? 4 : 0)); // m_pObj pointer + ObjHeader + info + bias
         *newAddr = newObj;
 
-        //fprintf(stderr, "[CLAMP] %s %d %p %p %p %p %zu %d\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, newAddr, newObj, size, updateChk);
+        // fprintf(stderr, "[CLAMP] %s %d %p %p %p %p %zu %d\n", __PRETTY_FUNCTION__, __LINE__, oldAddr, *oldAddr, newAddr, newObj, size, updateChk);
         assert(size > 12);
         memcpy(newObj - 4, *oldAddr - 4, size - 4 - 4 - (newBiased ? 4 : 0));
         *oldAddr = newObj;
@@ -1682,7 +1682,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, ret, obj, size);
         *(uintptr_t*)ret = (uintptr_t)obj;
         *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
-        //fprintf(stderr, "[CLAMP] GCHeap::Alloc %p %p %p Size 0x%zx CURR: 0x%zx %p\n", ret, *(uintptr_t**)ret, obj, size, offset, ((Object*)ret)->m_pObj);
+        //fprintf(stderr, "[CLAMP] %s %d %p %p %p Size 0x%zx CURR: 0x%zx %p\n", __PRETTY_FUNCTION__, __LINE__, ret, *(uintptr_t**)ret, obj, size, offset, ((Object*)ret)->m_pObj);
 
         return (Object*)ret;
     }
