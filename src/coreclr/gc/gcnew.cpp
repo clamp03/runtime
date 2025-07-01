@@ -897,13 +897,16 @@ void ngc_heap::mark_object_simple(uint8_t** po)
 {
     uint8_t* o = *po;
     size_t s = size(o);
+    // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, po, o);
     go_through_object_cl(method_table(o), o, s, poo, {
                 uint8_t* oo = *poo;
+                // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, poo, oo);
                 if (oo != nullptr && !marked(oo))
                 {
                     set_marked(oo);
                     if (OLD_MEM->isInHeapRegion((void*)oo))
                     {
+                        // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, poo, oo);
                         *((uintptr_t*)oo + 1) |= GC_MARKED;
                     }
 
@@ -976,12 +979,17 @@ uint8_t** ngc_heap::findObjectAddress(uint8_t** addr)
 
 void ngc_heap::mark(Object** ppObject, ScanContext* sc, uint32_t flags)
 {
+    if (ppObject == NULL)
+    {
+        return;
+    }
     uint8_t* po = (uint8_t*)*ppObject;
     if (po == NULL)
     {
         return;
     }
 
+    // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, ppObject, po);
     if (flags & GC_CALL_INTERIOR)
     {
         // TODO Something later
@@ -997,6 +1005,7 @@ void ngc_heap::mark(Object** ppObject, ScanContext* sc, uint32_t flags)
         }
     }
 
+    // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, ppObject, po);
     if (OLD_MEM->isInHeapRegion((void*)po))
     {
         *((uintptr_t*)po + 1) |= GC_MARKED;
@@ -1012,10 +1021,12 @@ void ngc_heap::relocate_object_simple(uint8_t** po)
 {
     uint8_t* o = *po;
     size_t s = size(o);
+    // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, po, o);
     go_through_object_cl(method_table(o), o, s, poo, {
                 uint8_t* oo = *poo;
                 if (OLD_MEM->isInHeapRegion((void*)oo))
                 {
+                    // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, poo, oo);
                     // fprintf(stderr, "[CLAMP] %s %d %p %p %p 0x%x %p\n", __PRETTY_FUNCTION__, __LINE__, (void*)(*((uintptr_t*)oo + 1) & ~0x3), *(uint8_t**)poo, oo, *(uintptr_t*)oo, poo);
                     *poo = (uint8_t*)(*((uintptr_t*)oo + 1) & ~0x3);
                     assert(*poo != (void*)0x0 && *poo != (void*)0x1);
@@ -1026,6 +1037,7 @@ void ngc_heap::relocate_object_simple(uint8_t** po)
                     if (contain_pointers_or_collectible(oo))
                     {
                         // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, oo, poo, *(uintptr_t*)oo, *(*(uintptr_t**)oo + 1));
+                        // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, poo, oo);
                         relocate_object_simple(poo);
                         // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, oo, poo, *(uintptr_t*)oo, *(*(uintptr_t**)oo + 1));
                     }
@@ -1370,6 +1382,20 @@ void ngc_heap::ngc_reloc_phase()
     GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
     int prevSize = OLD_MEM->curr;
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0x0);
+
+    size_t idx = 0;
+    while (idx < MEM->curr)
+    {
+        uint8_t* newAddr = (uint8_t*)MEM->getAddr(idx);
+        size_t size = *((uintptr_t*)newAddr + 1) & ~0x3;
+        if (contain_pointers_or_collectible(newAddr))
+        {
+            relocate_object_simple(&newAddr);
+        }
+        idx += size;
+    }
+
+
     GCScan::GcScanRoots(ngc_heap::relocate, 0, 0, &sc);
     GCScan::GcScanHandles(ngc_heap::relocate, 0, 0, &sc);
     finalize_queue->CFinalize::GcScanRoots(ngc_heap::relocate, 0, &sc);
@@ -1636,7 +1662,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         obj += bias;
         *(uintptr_t*)ret = (uintptr_t)obj;
         *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
-        //fprintf(stderr, "[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, PINNED_MEM->curr - size);
+        // fprintf(stderr, "[CLAMP] GCHeap::Alloc PINNED %p %p Size 0x%zx CURR: 0x%zx\n", ret, obj, size, PINNED_MEM->curr - size);
 
         return (Object*)ret;
     }
@@ -1682,7 +1708,7 @@ Object* ngc_heap::alloc(gc_alloc_context* context, size_t size, uint32_t flags)
         // fprintf(stderr, "[CLAMP] %s %d %p %p 0x%x\n", __PRETTY_FUNCTION__, __LINE__, ret, obj, size);
         *(uintptr_t*)ret = (uintptr_t)obj;
         *((uintptr_t*)ret + 1) = size | (bias != 0 ? OBJ_BIASED : 0);
-        //fprintf(stderr, "[CLAMP] %s %d %p %p %p Size 0x%zx CURR: 0x%zx %p\n", __PRETTY_FUNCTION__, __LINE__, ret, *(uintptr_t**)ret, obj, size, offset, ((Object*)ret)->m_pObj);
+        // fprintf(stderr, "[CLAMP] %s %d %p %p %p Size 0x%zx CURR: 0x%zx %p\n", __PRETTY_FUNCTION__, __LINE__, ret, *(uintptr_t**)ret, obj, size, offset, ((Object*)ret)->m_pObj);
 
         return (Object*)ret;
     }
