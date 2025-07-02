@@ -1478,7 +1478,7 @@ void OleVariant::MarshalNonBlittableRecordArrayOleToCom(void *oleArray, BASEARRA
     SIZE_T dstofs = ArrayBase::GetDataPtrOffset( (*pComArray)->GetMethodTable() );
     while (pOle < pOleEnd)
     {
-        BYTE* managedData = (BYTE*)(*(LPVOID*)pComArray) + dstofs;
+        BYTE* managedData = (BYTE*)(**(LPVOID**)pComArray) + dstofs;
 
         MarshalStructViaILStubCode(pManagedMarshalerCode, managedData, pOle, StructMarshalStubs::MarshalOperation::Unmarshal);
 
