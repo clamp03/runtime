@@ -102,7 +102,7 @@ public:
     static CFinalize* finalize_queue;
     static uint64_t total_suspended_time;
 
-    //static FinalizerWorkItem* finalizer_work;
+    static FinalizerWorkItem* finalizer_work;
 };
 
 BOOL ngc_heap::keep_ngc_threads_p = TRUE;
@@ -125,7 +125,7 @@ CFinalize*  ngc_heap::finalize_queue = 0;
 static HRESULT AllocateCFinalize(CFinalize **pCFinalize);
 #endif // FEATURE_PREMORTEM_FINALIZATION
 
-//FinalizerWorkItem* ngc_heap::finalizer_work = nullptr;
+FinalizerWorkItem* ngc_heap::finalizer_work = nullptr;
 
 size_t   DEFAULT_MEM_SIZE = 1024 * 1024 * 4;
 size_t   MAX_MEM_SIZE = DEFAULT_MEM_SIZE * 16;
@@ -506,9 +506,7 @@ enable_no_gc_region_callback_status GCHeap::EnableNoGCRegionCallback(NoGCRegionC
 
 FinalizerWorkItem* GCHeap::GetExtraWorkForFinalization()
 {
-    //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
-    //return Interlocked::ExchangePointer(&ngc_heap::finalizer_work, nullptr);
-    return nullptr;
+    return Interlocked::ExchangePointer(&ngc_heap::finalizer_work, nullptr);
 }
 
 unsigned int GCHeap::GetGenerationWithRange(Object* object, uint8_t** ppStart, uint8_t** ppAllocated, uint8_t** ppReserved)
@@ -1122,14 +1120,20 @@ bool GCHeap::StressHeap(gc_alloc_context * context)
 
 Object* GCHeap::Alloc(gc_alloc_context* context, size_t size, uint32_t flags)
 {
+    Object* newAlloc = nullptr;
     if (size > GetLOHThreshold())
     {
-        return ngc_heap::loh_alloc(context, size, flags);
+        newAlloc = ngc_heap::loh_alloc(context, size, flags);
     }
     else
     {
-        return ngc_heap::alloc(context, size, flags);
+        newAlloc = ngc_heap::alloc(context, size, flags);
     }
+    if (newAlloc == NULL || ((flags & GC_ALLOC_FINALIZE) && !ngc_heap::finalize_queue->RegisterForFinalization(0, newAlloc, size)))
+    {
+        return nullptr;
+    }
+    return newAlloc;
 }
 
 void GCHeap::FixAllocContext(gc_alloc_context* context, void* arg, void *heap)
@@ -1252,7 +1256,7 @@ void ngc_heap::ngc_mark_phase()
 
     GCScan::GcScanRoots(ngc_heap::mark, 0, 0, &sc);
     GCScan::GcScanHandles(ngc_heap::mark, 0, 0, &sc);
-    finalize_queue->CFinalize::GcScanRoots(ngc_heap::mark, 0, &sc);
+    finalize_queue->CFinalize::ScanForFinalization(ngc_heap::mark, 0, nullptr);
 
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
 
@@ -1456,6 +1460,7 @@ void ngc_heap::ngc()
     gc_count += 1;
     if (MEM == nullptr || MEM->curr * 16 < MEM_SIZE)
     {
+        finalize_queue->CFinalize::ScanForFinalization(nullptr, 0, nullptr);
         return;
     }
     ngc_started = TRUE;
@@ -1521,7 +1526,9 @@ void ngc_heap::ngc_thread_function(void* args)
             ngc_thread_running = FALSE;
             break;
         }
+        IsInProgress = true;
         ngc();
+        IsInProgress = false;
 
         ngc_start_event.Reset();
         ngc_done_event.Set();
@@ -2368,6 +2375,122 @@ CFinalize::GcScanRoots (promote_func* fn, int hn, ScanContext *pSC)
         (*fn)(po, pSC, 0);
     }
 }
+
+BOOL
+CFinalize::ScanForFinalization (promote_func* pfn, int gen, gc_heap* hp)
+{
+    ScanContext sc;
+    sc.promotion = TRUE;
+    UNREFERENCED_PARAMETER(hp);
+    sc.thread_count = 1;
+
+    BOOL finalizedFound = FALSE;
+
+    //start with gen and explore all the younger generations.
+    {
+        m_PromotedCount = 0;
+        for (unsigned int Seg = 0; Seg <= 4; Seg++)
+        {
+            Object** endIndex = SegQueue (Seg);
+            for (Object** i = SegQueueLimit (Seg)-1; i >= endIndex ;i--)
+            {
+                CObjectHeader* obj = (CObjectHeader*)*i;
+                dprintf (3, ("scanning: %zx", (size_t)obj));
+                //if (!g_theGCHeap->IsPromoted (obj))
+                {
+                    dprintf (3, ("freacheable: %zx", (size_t)obj));
+
+                    assert (method_table(obj)->HasFinalizer());
+
+                    if (GCToEEInterface::EagerFinalized(obj))
+                    {
+                        MoveItem (i, Seg, FreeListSeg);
+                    }
+                    else if ((obj->GetHeader()->GetBits()) & BIT_SBLK_FINALIZER_RUN)
+                    {
+                        //remove the object because we don't want to
+                        //run the finalizer
+                        MoveItem (i, Seg, FreeListSeg);
+
+                        //Reset the bit so it will be put back on the queue
+                        //if resurrected and re-registered.
+                        obj->GetHeader()->ClrBit (BIT_SBLK_FINALIZER_RUN);
+
+                    }
+                    else
+                    {
+                        m_PromotedCount++;
+
+                        if (method_table(obj)->HasCriticalFinalizer())
+                        {
+                            MoveItem (i, Seg, CriticalFinalizerListSeg);
+                        }
+                        else
+                        {
+                            MoveItem (i, Seg, FinalizerListSeg);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    finalizedFound = !IsSegEmpty(FinalizerListSeg) ||
+                     !IsSegEmpty(CriticalFinalizerListSeg);
+
+    if (finalizedFound && pfn)
+    {
+        //Promote the f-reachable objects
+        GcScanRoots (pfn,
+                     0
+                     , 0);
+
+        /*
+        hp->settings.found_finalizers = TRUE;
+
+        if (hp->settings.concurrent && hp->settings.found_finalizers)
+        {
+            GCToEEInterface::EnableFinalization(true);
+        }
+        */
+    }
+
+    return finalizedFound;
+}
+
+void
+CFinalize::MoveItem (Object** fromIndex,
+                     unsigned int fromSeg,
+                     unsigned int toSeg)
+{
+
+    int step;
+    ASSERT (fromSeg != toSeg);
+    if (fromSeg > toSeg)
+        step = -1;
+    else
+        step = +1;
+    // Each iteration places the element at the boundary closest to dest
+    // and then adjusts the boundary to move that element one segment closer
+    // to dest.
+    Object** srcIndex = fromIndex;
+    for (unsigned int i = fromSeg; i != toSeg; i+= step)
+    {
+        // Select SegQueue[i] for step==-1, SegQueueLimit[i] for step==1
+        Object**& destFill = m_FillPointers[i+(step - 1 )/2];
+        // Select SegQueue[i] for step==-1, SegQueueLimit[i]-1 for step==1
+        //   (SegQueueLimit[i]-1 is the last entry in segment i)
+        Object** destIndex = destFill - (step + 1)/2;
+        if (srcIndex != destIndex)
+        {
+            Object* tmp = *srcIndex;
+            *srcIndex = *destIndex;
+            *destIndex = tmp;
+        }
+        destFill -= step;
+        srcIndex = destIndex;
+    }
+}
+
 
 #ifdef FEATURE_PREMORTEM_FINALIZATION
 static
