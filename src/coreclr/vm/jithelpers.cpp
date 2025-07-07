@@ -1815,6 +1815,7 @@ FCIMPL1(void, JIT_MonExit_Portable, Object* obj)
     {
         goto FramedLockHelper;
     }
+    //GCHeapUtilities::RequestObjectCopy((void*)obj, false);
 
     // Handle the simple case without erecting helper frame
     action = obj->LeaveObjMonitorHelper(GetThread());

@@ -2075,7 +2075,7 @@ BOOL ObjHeader::Validate (BOOL bVerifySyncBlkIndex)
             if (bVerifySyncBlkIndex  && GCHeapUtilities::GetGCHeap()->RuntimeStructuresValid ())
             {
                 DWORD sbIndex = bits & MASK_SYNCBLOCKINDEX;
-                ASSERT_AND_CHECK(SyncTableEntry::GetSyncTableEntry()[sbIndex].m_Object == obj);
+                ASSERT_AND_CHECK(SyncTableEntry::GetSyncTableEntry()[sbIndex].m_Object->m_pObj == obj->m_pObj);
             }
         }
         else
@@ -2141,7 +2141,7 @@ SyncBlock *ObjHeader::GetSyncBlock()
 #ifdef _DEBUG
         // Has our backpointer been correctly updated through every GC?
         PTR_SyncTableEntry pEntries(SyncTableEntry::GetSyncTableEntry());
-        _ASSERTE(pEntries[GetHeaderSyncBlockIndex()].m_Object == GetBaseObject());
+        _ASSERTE(pEntries[GetHeaderSyncBlockIndex()].m_Object->m_pObj == GetBaseObject()->m_pObj);
 #endif // _DEBUG
         RETURN syncBlock;
     }

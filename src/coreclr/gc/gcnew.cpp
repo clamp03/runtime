@@ -1256,7 +1256,8 @@ void ngc_heap::ngc_mark_phase()
 
     GCScan::GcScanRoots(ngc_heap::mark, 0, 0, &sc);
     GCScan::GcScanHandles(ngc_heap::mark, 0, 0, &sc);
-    finalize_queue->CFinalize::ScanForFinalization(ngc_heap::mark, 0, nullptr);
+    finalize_queue->CFinalize::GcScanRoots(ngc_heap::mark, 0, &sc);
+    // finalize_queue->CFinalize::ScanForFinalization(ngc_heap::mark, 0, nullptr);
 
     Interlocked::Exchange(&g_gc_copying_address, (uintptr_t)0xffffffff);
 
@@ -1464,7 +1465,7 @@ void ngc_heap::ngc()
         return;
     }
     ngc_started = TRUE;
-    // fprintf(stderr, "[CLAMP] START GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] START GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     ngc_mark_phase();
     //fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
@@ -1472,7 +1473,7 @@ void ngc_heap::ngc()
     ngc_copy_phase();
     //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     ngc_reloc_phase();
-    // fprintf(stderr, "[CLAMP] DONE GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+    //fprintf(stderr, "[CLAMP] DONE GC %s %d\n", __PRETTY_FUNCTION__, __LINE__);
     //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     ngc_started = FALSE;
 }
@@ -2344,6 +2345,7 @@ CFinalize::RegisterForFinalization (int gen, Object* obj, size_t size)
 
     // We have reached the destination segment
     // store the object
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, obj);
     **s_i = obj;
     // increment the fill pointer
     (*s_i)++;
@@ -2363,8 +2365,9 @@ CFinalize::GcScanRoots (promote_func* fn, int hn, ScanContext *pSC)
     pSC->thread_number = hn;
 
     //scan the finalization queue
-    Object** startIndex  = SegQueue (FinalizerStartSeg);
+    Object** startIndex  = SegQueue (0);
     Object** stopIndex  = SegQueueLimit (FinalizerMaxSeg);
+    // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, startIndex, stopIndex);
 
     for (Object** po = startIndex; po < stopIndex; po++)
     {
@@ -2373,6 +2376,7 @@ CFinalize::GcScanRoots (promote_func* fn, int hn, ScanContext *pSC)
         dprintf (3, ("scan f %zx", (size_t)o));
 
         (*fn)(po, pSC, 0);
+        // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, o, *po);
     }
 }
 
@@ -2396,6 +2400,7 @@ CFinalize::ScanForFinalization (promote_func* pfn, int gen, gc_heap* hp)
             {
                 CObjectHeader* obj = (CObjectHeader*)*i;
                 dprintf (3, ("scanning: %zx", (size_t)obj));
+                // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, obj);
                 //if (!g_theGCHeap->IsPromoted (obj))
                 {
                     dprintf (3, ("freacheable: %zx", (size_t)obj));
@@ -2437,6 +2442,7 @@ CFinalize::ScanForFinalization (promote_func* pfn, int gen, gc_heap* hp)
     finalizedFound = !IsSegEmpty(FinalizerListSeg) ||
                      !IsSegEmpty(CriticalFinalizerListSeg);
 
+#if 0
     if (finalizedFound && pfn)
     {
         //Promote the f-reachable objects
@@ -2453,6 +2459,7 @@ CFinalize::ScanForFinalization (promote_func* pfn, int gen, gc_heap* hp)
         }
         */
     }
+#endif
 
     return finalizedFound;
 }

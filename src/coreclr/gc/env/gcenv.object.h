@@ -160,6 +160,16 @@ class ObjectInternal
 {
 public:
     MethodTable * m_pMethTab;
+
+    MethodTable * GetGCSafeMethodTable() const
+    {
+#ifdef HOST_64BIT
+        return (MethodTable *)((uintptr_t)m_pMethTab & ~7);
+#else
+        return (MethodTable *)((uintptr_t)m_pMethTab & ~3);
+#endif //HOST_64BIT
+
+    }
 };
 
 class Object
@@ -179,11 +189,7 @@ public:
 
     MethodTable * GetGCSafeMethodTable() const
     {
-#ifdef HOST_64BIT
-        return (MethodTable *)((uintptr_t)m_pObj->m_pMethTab & ~7);
-#else
-        return (MethodTable *)((uintptr_t)m_pObj->m_pMethTab & ~3);
-#endif //HOST_64BIT
+        return m_pObj->GetGCSafeMethodTable();
     }
 
     void RawSetMethodTable(MethodTable * pMT)
