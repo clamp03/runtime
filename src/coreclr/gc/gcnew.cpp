@@ -1206,7 +1206,6 @@ BOOL ngc_heap::prepare_ngc_thread()
 void ngc_heap::ngc_mark_phase()
 {
     uint64_t start = GetHighPrecisionTimeStamp();
-    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
 
     OLD_MEM = MEM;
 
@@ -1372,6 +1371,31 @@ void ngc_heap::ngc_copy_phase()
             Interlocked::Exchange(&g_gc_copying_address, 0xffffffff);
         }
     }
+#if 0
+    while (LOH_MEM && (*((uintptr_t*)&LOH_MEM->mem + 1) & GC_MARKED) == 0)
+    {
+        heap_region* tmp = LOH_MEM;
+        LOH_MEM = LOH_MEM->next;
+        fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, tmp, &tmp->mem);
+        free(tmp);
+    }
+    heap_region* loh = LOH_MEM;
+    while (loh && loh->next)
+    {
+        size_t info = *((uintptr_t*)(&loh->next->mem) + 1);
+        if ((info & GC_MARKED) == 0)
+        {
+            heap_region* tmp = loh->next;
+            loh->next = tmp->next;
+            fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, tmp, &tmp->mem);
+            free(tmp);
+        }
+        else
+        {
+            loh = loh->next;
+        }
+    }
+#endif
 }
 
 void ngc_heap::ngc_reloc_phase()
@@ -1405,10 +1429,12 @@ void ngc_heap::ngc_reloc_phase()
     GCScan::GcScanHandles(ngc_heap::relocate, 0, 0, &sc);
     finalize_queue->CFinalize::GcScanRoots(ngc_heap::relocate, 0, &sc);
 
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, OLD_MEM);
     free(OLD_MEM);
     OLD_MEM = NULL;
 
-    //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, IND_LIST);
     free(IND_LIST);
     IND_CURR = 0;
     IND_LIST = nullptr;
@@ -1459,9 +1485,11 @@ void ngc_heap::garbage_collect()
 void ngc_heap::ngc()
 {
     gc_count += 1;
+    GCToEEInterface::SuspendEE(SUSPEND_FOR_GC);
+    finalize_queue->CFinalize::ScanForFinalization(nullptr, 0, nullptr);
     if (MEM == nullptr || MEM->curr * 16 < MEM_SIZE)
     {
-        finalize_queue->CFinalize::ScanForFinalization(nullptr, 0, nullptr);
+        GCToEEInterface::RestartEE(TRUE);
         return;
     }
     ngc_started = TRUE;
@@ -2020,7 +2048,8 @@ void GCHeap::SetReservedVMLimit(size_t vmlimit)
 
 Object* GCHeap::GetNextFinalizableObject()
 {
-    return ngc_heap::finalize_queue->GetNextFinalizableObject();
+    // return nullptr;
+    return ngc_heap::finalize_queue->GetNextFinalizableObject(true);
 }
 
 size_t GCHeap::GetNumberFinalizableObjects()
@@ -2149,6 +2178,13 @@ int GCHeap::RefreshMemoryLimit()
     return 0;
 }
 
+inline
+unsigned int gen_segment (int gen)
+{
+    assert (((signed)total_generation_count - gen - 1)>=0);
+    return (total_generation_count - gen - 1);
+}
+
 bool CFinalize::Initialize()
 {
     CONTRACTL {
@@ -2158,6 +2194,7 @@ bool CFinalize::Initialize()
 
     const int INITIAL_FINALIZER_ARRAY_SIZE = 100;
     m_Array = new (nothrow)(Object*[INITIAL_FINALIZER_ARRAY_SIZE]);
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, m_Array);
 
     if (!m_Array)
     {
@@ -2186,28 +2223,53 @@ bool CFinalize::Initialize()
 
 CFinalize::~CFinalize()
 {
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, m_Array);
     delete[] m_Array;
 }
 
+// int counts = 0;
 Object* CFinalize::GetNextFinalizableObject(BOOL only_non_critical)
 {
     Object* obj = 0;
     EnterFinalizeLock();
 
+    //fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, only_non_critical);
+    Object** startIndex  = SegQueue (FinalizerListSeg);
+    Object** stopIndex  = SegQueueLimit (FinalizerListSeg);
+#if 0
+    int counts = 0;
+    for (Object** po = startIndex; po < stopIndex; po++)
+    {
+        counts ++;
+    }
+    // fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, counts);
+#endif
     if (!IsSegEmpty(FinalizerListSeg))
     {
         obj =  *(--SegQueueLimit (FinalizerListSeg));
     }
+#if 1
     else if (!only_non_critical && !IsSegEmpty(CriticalFinalizerListSeg))
     {
         //the FinalizerList is empty, we can adjust both
         // limit instead of moving the object to the free list
         obj =  *(--SegQueueLimit (CriticalFinalizerListSeg));
         --SegQueueLimit (FinalizerListSeg);
+        // fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, obj, obj->m_pObj);
     }
+#endif
     if (obj)
     {
         dprintf (3, ("running finalizer for %p (mt: %p)", obj, method_table (obj)));
+
+#if 0
+        fprintf(stderr, "[CLAMP] %s %d %p %p\n", __PRETTY_FUNCTION__, __LINE__, obj, obj->m_pObj);
+        counts ++;
+        if (counts > 19260)
+        {
+            fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, counts);
+        }
+#endif
     }
     LeaveFinalizeLock();
     return obj;
@@ -2272,6 +2334,7 @@ CFinalize::GrowArray()
     size_t newArraySize =  (size_t)(((float)oldArraySize / 10) * 12);
 
     Object** newArray = new (nothrow) Object*[newArraySize];
+    // fprintf(stderr, "[CLAMP] %s %d %p %d %d\n", __PRETTY_FUNCTION__, __LINE__, newArray, oldArraySize, newArraySize);
     if (!newArray)
     {
         return FALSE;
@@ -2285,10 +2348,13 @@ CFinalize::GrowArray()
     {
         m_FillPointers [i] += (newArray - m_Array);
     }
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, m_Array);
     delete[] m_Array;
+
     m_Array = newArray;
     m_EndArray = &m_Array [newArraySize];
 
+    // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, m_Array);
     return TRUE;
 }
 
@@ -2303,7 +2369,7 @@ CFinalize::RegisterForFinalization (int gen, Object* obj, size_t size)
     EnterFinalizeLock();
 
     // Adjust gen
-    unsigned int dest = 0; //gen_segment (gen);
+    unsigned int dest = gen_segment (gen);
 
     // Adjust boundary for segments so that GC will keep objects alive.
     Object*** s_i = &SegQueue (FreeListSeg);
@@ -2391,13 +2457,16 @@ CFinalize::ScanForFinalization (promote_func* pfn, int gen, gc_heap* hp)
     BOOL finalizedFound = FALSE;
 
     //start with gen and explore all the younger generations.
+    unsigned int startSeg = gen_segment (gen);
     {
         m_PromotedCount = 0;
-        for (unsigned int Seg = 0; Seg <= 4; Seg++)
+        unsigned int Seg = gen_segment (gen);
+        for (unsigned int Seg = startSeg; Seg <= gen_segment(0); Seg++)
         {
             Object** endIndex = SegQueue (Seg);
             for (Object** i = SegQueueLimit (Seg)-1; i >= endIndex ;i--)
             {
+                //fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, i);
                 CObjectHeader* obj = (CObjectHeader*)*i;
                 dprintf (3, ("scanning: %zx", (size_t)obj));
                 // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, obj);
@@ -2438,6 +2507,7 @@ CFinalize::ScanForFinalization (promote_func* pfn, int gen, gc_heap* hp)
                 }
             }
         }
+        // fprintf(stderr, "[CLAMP] %s %d %d\n", __PRETTY_FUNCTION__, __LINE__, m_PromotedCount);
     }
     finalizedFound = !IsSegEmpty(FinalizerListSeg) ||
                      !IsSegEmpty(CriticalFinalizerListSeg);
