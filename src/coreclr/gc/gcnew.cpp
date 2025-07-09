@@ -2530,6 +2530,7 @@ CFinalize::ScanForFinalization (promote_func* pfn, int gen, gc_heap* hp)
         */
     }
 #endif
+    if (finalizedFound) GCToEEInterface::EnableFinalization(true);
 
     return finalizedFound;
 }
