@@ -354,7 +354,7 @@ void AllocateThreadStaticBoxes(MethodTable *pMT, PTRARRAYREF *ppRef)
             MethodTable* pFieldMT = th.GetMethodTable();
 
             OBJECTREF obj = MethodTable::AllocateStaticBox(pFieldMT, pMT->HasFixedAddressVTStatics());
-            uint8_t *pBase = (uint8_t*)OBJECTREFToObject(*ppRef);
+            uint8_t *pBase = (uint8_t*)OBJECTREFToObject(*ppRef)->m_pObj;
             SetObjectReference((OBJECTREF*)(pBase + pField->GetOffset()), obj);
         }
 
