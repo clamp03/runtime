@@ -5,6 +5,7 @@
 #include <coreclrhost.h>
 #include <corehost/host_runtime_contract.h>
 #include <minipal/debugger.h>
+#include <sys/wait.h>
 
 #include "corerun.hpp"
 #include "dotenv.hpp"
@@ -496,13 +497,44 @@ static int run(const configuration& config)
     {
         actions.before_execute_assembly(config.entry_assembly_fullpath);
 
-        result = coreclr_execute_func(
-            CurrentClrInstance,
-            CurrentAppDomainId,
-            config.entry_assembly_argc,
-            argv_utf8.get(),
-            entry_assembly_utf8.c_str(),
-            (uint32_t*)&exit_code);
+#if 1
+        fprintf(stderr, "[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, getpid());
+        pid_t pid = fork();
+        fprintf(stderr, "[CLAMP] %s %d 0x%x 0x%x\n", __PRETTY_FUNCTION__, __LINE__, getpid(), pid);
+        if (pid == -1)
+        {
+            fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
+            return -1;
+        }
+        if (pid > 0)
+        {
+            int status;
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status))
+            {
+                fprintf(stderr, "[CLAMP] %s %d Sucess. Forked process terminated normally\n", __PRETTY_FUNCTION__, __LINE__);
+            }
+            else
+            {
+                fprintf(stderr, "[CLAMP] %s %d FAILED. Forked process terminated abnormally\n", __PRETTY_FUNCTION__, __LINE__);
+                return -1;
+            }
+            return 0;
+        }
+        else
+        {
+            fprintf(stderr, "[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, getpid());
+#endif
+            result = coreclr_execute_func(
+                    CurrentClrInstance,
+                    CurrentAppDomainId,
+                    config.entry_assembly_argc,
+                    argv_utf8.get(),
+                    entry_assembly_utf8.c_str(),
+                    (uint32_t*)&exit_code);
+#if 1
+        }
+#endif
         if (FAILED(result))
         {
             pal::fprintf(stderr, W("BEGIN: coreclr_execute_assembly failed - Error: 0x%08x\n"), result);

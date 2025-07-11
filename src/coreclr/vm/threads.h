@@ -1803,6 +1803,20 @@ public:
         return m_OSThreadId;
     }
 
+    void SetOSThreadId(DWORD threadId)
+    {
+        LIMITED_METHOD_CONTRACT;
+        SUPPORTS_DAC;
+        m_OSThreadId = (SIZE_T)threadId;
+    }
+
+    void SetOSThreadId64(SIZE_T threadId)
+    {
+        LIMITED_METHOD_CONTRACT;
+        SUPPORTS_DAC;
+        m_OSThreadId = threadId;
+    }
+
     // This API is to be used for Debugger only.
     // We need to be able to return the true value of m_OSThreadId.
     // On platforms with 64 bit thread IDs we downcast to 32 bit.

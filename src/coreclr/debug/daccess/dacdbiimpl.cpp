@@ -914,7 +914,7 @@ void DacDbiInterfaceImpl::GetSequencePoints(MethodDesc *     pMethodDesc,
 
     ULONG32 entryCount;
     BOOL success = DebugInfoManager::GetBoundariesAndVars(request,
-                                                      InfoStoreNew, 
+                                                      InfoStoreNew,
                                                       NULL, // allocator
                                                       BoundsType::Uninstrumented,
                                                       &entryCount, &mapCopy,
@@ -5503,7 +5503,7 @@ void DacDbiInterfaceImpl::GetContext(VMPTR_Thread vmThread, DT_CONTEXT * pContex
                 {
                     UpdateContextFromRegDisp(&tmpRd, &tmpContext);
                     CopyMemory(pContextBuffer, &tmpContext, sizeof(*pContextBuffer));
-                    pContextBuffer->ContextFlags = DT_CONTEXT_CONTROL 
+                    pContextBuffer->ContextFlags = DT_CONTEXT_CONTROL
 #if defined(TARGET_AMD64) || defined(TARGET_ARM)
                                                 | DT_CONTEXT_INTEGER  // DT_CONTEXT_INTEGER is needed to include the frame register on ARM32 and AMD64 architectures
                                                                       // DT_CONTEXT_CONTROL already includes the frame register for X86 and ARM64 architectures
@@ -7184,7 +7184,7 @@ HRESULT DacDbiInterfaceImpl::AreOptimizationsDisabled(VMPTR_Module vmModule, mdM
         *pOptimizationsDisabled = activeILVersion.IsDeoptimized();
     }
 #else
-    pOptimizationsDisabled->SetDacTargetPtr(0);
+    *pOptimizationsDisabled = false;
 #endif
 
     return S_OK;

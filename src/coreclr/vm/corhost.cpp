@@ -304,6 +304,7 @@ HRESULT CorHost2::ExecuteAssembly(DWORD dwAppDomainId,
             goto ErrExit;
         }
     }
+    pThread->SetOSThreadId(getpid());
 
     INSTALL_UNHANDLED_MANAGED_EXCEPTION_TRAP;
     INSTALL_UNWIND_AND_CONTINUE_HANDLER;

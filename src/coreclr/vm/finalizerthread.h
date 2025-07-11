@@ -54,6 +54,7 @@ public:
     {
         WRAPPER_NO_CONTRACT;
         fQuitFinalizer = TRUE;
+#if 0
         EnableFinalization();
 
         // Do not wait for FinalizerThread if the current one is FinalizerThread.
@@ -63,6 +64,7 @@ public:
             // thread's context is needed (i.e. RCW cleanup)
             hEventFinalizerToShutDown->Wait(INFINITE, /*alertable*/ TRUE);
         }
+#endif
     }
 
     static void WaitForFinalizerThreadStart();
