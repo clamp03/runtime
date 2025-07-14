@@ -766,6 +766,14 @@ HRESULT EEConfig::sync()
     return hr;
 }
 
+void EEConfig::ReloadTieredCompilation()
+{
+    LIMITED_METHOD_CONTRACT;
+#if defined(FEATURE_TIERED_COMPILATION)
+    fTieredCompilation = Configuration::GetKnobBooleanValue(W("System.Runtime.TieredCompilation"), CLRConfig::EXTERNAL_TieredCompilation);
+#endif // FEATURE_TIERED_COMPILATION
+}
+
 bool EEConfig::ExcludeReadyToRun(LPCUTF8 assemblyName) const
 {
     LIMITED_METHOD_CONTRACT;
@@ -1150,4 +1158,5 @@ bool EEConfig::ShouldLogCCWRefCountChange(LPCUTF8 pszClassName, LPCUTF8 pszNames
     }
     return false;
 }
+
 #endif // FEATURE_COMINTEROP

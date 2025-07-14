@@ -76,7 +76,7 @@ private:
 private:
     void OptimizeMethod(NativeCodeVersion nativeCodeVersion);
     HRESULT DeoptimizeMethodHelper(Module* pModule, mdMethodDef methodDef);
-    
+
     NativeCodeVersion GetNextMethodToOptimize();
     BOOL CompileCodeVersion(NativeCodeVersion nativeCodeVersion);
     void ActivateCodeVersion(NativeCodeVersion nativeCodeVersion);

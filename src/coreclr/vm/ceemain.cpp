@@ -823,6 +823,7 @@ void EEStartupHelper()
         // Static initialization
         SystemDomain::Attach();
 
+        g_pConfig->DisableTieredCompilation();
         // Start up the EE initializing all the global variables
         ECall::Init();
 
@@ -840,10 +841,12 @@ void EEStartupHelper()
 #endif // !TARGET_UNIX
 
 #ifdef DEBUGGING_SUPPORTED
+#if 0
         // Initialize the debugging services. This must be done before any
         // EE thread objects are created, and before any classes or
         // modules are loaded.
         InitializeDebugger(); // throws on error
+#endif
 #endif // DEBUGGING_SUPPORTED
 
 #ifdef PROFILING_SUPPORTED
@@ -914,11 +917,13 @@ void EEStartupHelper()
         SetupThread();
 
 #ifdef DEBUGGING_SUPPORTED
+#if 0
         // Notify debugger once the first thread is created to finish initialization.
         if (g_pDebugInterface != NULL)
         {
             g_pDebugInterface->StartupPhase2(GetThread());
         }
+#endif
 #endif
 
 #ifndef TARGET_WINDOWS
@@ -943,6 +948,7 @@ void EEStartupHelper()
         SetGarbageCollectorFullyInitialized();
 
 #ifdef DEBUGGING_SUPPORTED
+#if 0
         // Make a call to publish the DefaultDomain for the debugger
         // This should be done before assemblies/modules are loaded into it (i.e. SystemDomain::Init)
         // and after its OK to switch GC modes and synchronize for sending events to the debugger.
@@ -950,6 +956,7 @@ void EEStartupHelper()
         LOG((LF_CORDB | LF_SYNC | LF_STARTUP, LL_INFO1000, "EEStartup: adding default domain 0x%x\n",
              SystemDomain::System()->DefaultDomain()));
         SystemDomain::System()->PublishAppDomainAndInformDebugger(SystemDomain::System()->DefaultDomain());
+#endif
 #endif
 
 #ifdef HAVE_GCCOVER
@@ -1109,7 +1116,36 @@ HRESULT EEStartup()
     return g_EEStartupStatus;
 }
 
+HRESULT EnsureEEPreforkedStarted()
+{
+    Thread *pCurrThread = GetThreadNULLOk();
+    pid_t pid = getpid();
+    HRESULT hr = S_OK;
+    if (pCurrThread->GetOSThreadId() != pid)
+    {
+        // Forked Thread
+        pCurrThread->SetOSThreadId(pid);
 
+#ifdef FEATURE_TIERED_COMPILATION
+        g_pConfig->ReloadTieredCompilation();
+#endif // FEATURE_TIERED_COMPILATION
+#ifdef DEBUGGING_SUPPORTED
+        InitializeDebugger(); // throws on error
+        g_pDebugInterface->StartupPhase2(GetThread());
+        if (g_pDebugInterface != NULL)
+        {
+            g_pDebugInterface->StartupPhase2(GetThread());
+        }
+        LOG((LF_CORDB | LF_SYNC | LF_STARTUP, LL_INFO1000, "EEStartup: adding default domain 0x%x\n",
+             SystemDomain::System()->DefaultDomain()));
+        SystemDomain::System()->PublishAppDomainAndInformDebugger(SystemDomain::System()->DefaultDomain());
+#endif // DEBUGGING_SUPPORTED
+#ifndef TARGET_WINDOWS
+        FinalizerThread::FinalizerThreadCreate();
+#endif // TARGET_WINDOWS
+    }
+    return hr;
+}
 
 // ---------------------------------------------------------------------------
 // %%Function: ForceEEShutdown()
