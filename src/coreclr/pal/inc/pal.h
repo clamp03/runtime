@@ -213,6 +213,11 @@ PAL_Initialize(
 PALIMPORT
 int
 PALAPI
+PAL_InitializePreforked();
+
+PALIMPORT
+int
+PALAPI
 PAL_InitializeDLL();
 
 PALIMPORT

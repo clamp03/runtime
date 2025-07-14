@@ -494,6 +494,7 @@ bool
 ds_ipc_stream_factory_has_active_ports (void)
 {
 	return !load_shutting_down_state () &&
+        _ds_port_array &&
 		dn_vector_ptr_size (_ds_port_array) > 0;
 }
 

@@ -716,8 +716,10 @@ void EEStartupHelper()
 #endif
 
 #ifdef FEATURE_PERFTRACING
+#if 0
         DiagnosticServerAdapter::Initialize();
         DiagnosticServerAdapter::PauseForDiagnosticsMonitor();
+#endif
 #endif // FEATURE_PERFTRACING
 
 #ifdef FEATURE_GDBJIT
@@ -1125,6 +1127,13 @@ HRESULT EnsureEEPreforkedStarted()
     {
         // Forked Thread
         pCurrThread->SetOSThreadId(pid);
+#ifndef __wasm__
+        PAL_InitializePreforked();
+#endif // __wasm__
+#ifdef FEATURE_PERFTRACING
+        DiagnosticServerAdapter::Initialize();
+        DiagnosticServerAdapter::PauseForDiagnosticsMonitor();
+#endif // FEATURE_PERFTRACING
 
 #ifdef FEATURE_TIERED_COMPILATION
         g_pConfig->ReloadTieredCompilation();
@@ -1132,10 +1141,6 @@ HRESULT EnsureEEPreforkedStarted()
 #ifdef DEBUGGING_SUPPORTED
         InitializeDebugger(); // throws on error
         g_pDebugInterface->StartupPhase2(GetThread());
-        if (g_pDebugInterface != NULL)
-        {
-            g_pDebugInterface->StartupPhase2(GetThread());
-        }
         LOG((LF_CORDB | LF_SYNC | LF_STARTUP, LL_INFO1000, "EEStartup: adding default domain 0x%x\n",
              SystemDomain::System()->DefaultDomain()));
         SystemDomain::System()->PublishAppDomainAndInformDebugger(SystemDomain::System()->DefaultDomain());

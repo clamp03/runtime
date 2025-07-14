@@ -95,6 +95,7 @@ extern bool g_running_in_exe;
 // the machine
 bool g_arm64_atomics_present = false;
 #endif
+static CPalThread* g_pThread = NULL;
 
 Volatile<INT> init_count = 0;
 Volatile<BOOL> shutdown_intent = 0;
@@ -588,21 +589,23 @@ Initialize(
             }
         }
 
-#if 0
 #ifndef __wasm__
         if (flags & PAL_INITIALIZE_SYNC_THREAD)
         {
             //
             // Tell the synchronization manager to start its worker thread
             //
-            palError = CPalSynchMgrController::StartWorker(pThread);
+            // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, pThread);
+            g_pThread = pThread;
+#if 0
+            // palError = CPalSynchMgrController::StartWorker(pThread);
             if (NO_ERROR != palError)
             {
                 ERROR("Synch manager failed to start worker thread\n");
                 goto CLEANUP13;
             }
-        }
 #endif
+        }
 #endif
         /* initialize structured exception handling stuff (signals, etc) */
         if (FALSE == SEHInitialize(pThread, flags))
@@ -683,6 +686,17 @@ done:
 
     LOGEXIT("PAL_Initialize returns int %d\n", retval);
     return retval;
+}
+
+int
+PALAPI
+PAL_InitializePreforked()
+{
+    if (g_pThread)
+    {
+        return CPalSynchMgrController::StartWorker(g_pThread);
+    }
+    return 0;
 }
 
 
