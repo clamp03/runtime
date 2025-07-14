@@ -506,8 +506,10 @@ static int run(const configuration& config)
             fprintf(stderr, "[CLAMP] %s %d\n", __PRETTY_FUNCTION__, __LINE__);
             return -1;
         }
+
         if (pid > 0)
         {
+
             int status;
             waitpid(pid, &status, 0);
             if (WIFEXITED(status))

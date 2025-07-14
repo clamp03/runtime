@@ -952,8 +952,10 @@ HRESULT Thread::DetachThread(BOOL inTerminationCallback)
     //
     // (It's possible that this is the startup thread, and startup failed, and so the finalization
     //  machinery isn't fully initialized.  Hence this check.)
-    if (g_fEEStarted)
+    if (g_fEEStarted && FinalizerThread::GetFinalizerThread())
+    {
         FinalizerThread::EnableFinalization();
+    }
 
     return S_OK;
 }

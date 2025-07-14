@@ -460,7 +460,6 @@ void FinalizerThread::FinalizerThreadCreate()
     hEventFinalizerToShutDown->CreateAutoEvent(FALSE);
 
     _ASSERTE(g_pFinalizerThread == 0);
-    /*
     g_pFinalizerThread = SetupUnstartedThread();
 
     // We don't want the thread block disappearing under us -- even if the
@@ -485,7 +484,6 @@ void FinalizerThread::FinalizerThreadCreate()
         // and the moment we execute the test below.
         _ASSERTE(dwRet == 1 || dwRet == 2);
     }
-    */
 }
 
 static int g_fullGcCountSeenByFinalization;

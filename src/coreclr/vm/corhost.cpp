@@ -301,10 +301,19 @@ HRESULT CorHost2::ExecuteAssembly(DWORD dwAppDomainId,
         pThread = SetupThreadNoThrow(&hr);
         if (pThread == NULL)
         {
-            goto ErrExit;
+            return hr;
         }
     }
-    pThread->SetOSThreadId(getpid());
+
+    pid_t pid = getpid();
+    if (pThread->GetOSThreadId() != pid)
+    {
+        // Forked Thread
+        pThread->SetOSThreadId(pid);
+#ifndef TARGET_WINDOWS
+        FinalizerThread::FinalizerThreadCreate();
+#endif // TARGET_WINDOWS
+    }
 
     INSTALL_UNHANDLED_MANAGED_EXCEPTION_TRAP;
     INSTALL_UNWIND_AND_CONTINUE_HANDLER;
@@ -364,8 +373,6 @@ HRESULT CorHost2::ExecuteAssembly(DWORD dwAppDomainId,
     ExecutableAllocator::DumpHolderUsage();
     ExecutionManager::DumpExecutionManagerUsage();
 #endif
-
-ErrExit:
 
     return hr;
 }

@@ -51687,7 +51687,7 @@ GCHeap::GarbageCollectGeneration (unsigned int gen, gc_reason reason)
 #endif //!MULTIPLE_HEAPS
 
 #ifdef FEATURE_PREMORTEM_FINALIZATION
-    // GCToEEInterface::EnableFinalization(!pGenGCHeap->settings.concurrent && pGenGCHeap->settings.found_finalizers);
+    GCToEEInterface::EnableFinalization(!pGenGCHeap->settings.concurrent && pGenGCHeap->settings.found_finalizers);
 #endif // FEATURE_PREMORTEM_FINALIZATION
 
     return dd_collection_count (dd);

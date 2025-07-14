@@ -924,7 +924,7 @@ void EEStartupHelper()
 #ifndef TARGET_WINDOWS
         // This isn't done as part of InitializeGarbageCollector() above because
         // debugger must be initialized before creating EE thread objects
-        FinalizerThread::FinalizerThreadCreate();
+        // FinalizerThread::FinalizerThreadCreate();
 #else
         // On windows the finalizer thread is already partially created and is waiting
         // right before doing HasStarted(). We will release it now.
