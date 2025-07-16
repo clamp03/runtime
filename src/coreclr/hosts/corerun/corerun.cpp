@@ -6,6 +6,7 @@
 #include <corehost/host_runtime_contract.h>
 #include <minipal/debugger.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 
 #include "corerun.hpp"
 #include "dotenv.hpp"
@@ -472,6 +473,11 @@ static int run(const configuration& config)
     }
 
     int result;
+    {
+    struct timeval t0;
+    struct timeval t1;
+    float elapsed;
+    gettimeofday(&t0, 0);
     result = coreclr_init_func(
         exe_path_utf8.c_str(),
         "corerun",
@@ -480,6 +486,10 @@ static int run(const configuration& config)
         propertyValues.data(),
         &CurrentClrInstance,
         &CurrentAppDomainId);
+    gettimeofday(&t1, 0);
+    elapsed = (t1.tv_sec - t0.tv_sec) * 1000.0f + (t1.tv_usec - t0.tv_usec) / 1000.0f;
+    printf("Init Code executed in %f milliseconds.\n", elapsed);
+    }
     if (FAILED(result))
     {
         pal::fprintf(stderr, W("BEGIN: coreclr_initialize failed - Error: 0x%08x\n"), result);
@@ -527,6 +537,10 @@ static int run(const configuration& config)
         {
             fprintf(stderr, "[CLAMP] %s %d 0x%x\n", __PRETTY_FUNCTION__, __LINE__, getpid());
 #endif
+    struct timeval t0;
+    struct timeval t1;
+    float elapsed;
+    gettimeofday(&t0, 0);
             result = coreclr_execute_func(
                     CurrentClrInstance,
                     CurrentAppDomainId,
@@ -534,6 +548,9 @@ static int run(const configuration& config)
                     argv_utf8.get(),
                     entry_assembly_utf8.c_str(),
                     (uint32_t*)&exit_code);
+    gettimeofday(&t1, 0);
+    elapsed = (t1.tv_sec - t0.tv_sec) * 1000.0f + (t1.tv_usec - t0.tv_usec) / 1000.0f;
+    printf("Exec Code executed in %f milliseconds.d\n", elapsed);
 #if 1
         }
 #endif

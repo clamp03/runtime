@@ -1360,6 +1360,7 @@ namespace CorUnix
             return ERROR_INTERNAL_ERROR;
         }
 
+        pSynchManager->CreateProcessPipe();
         HANDLE hWorkerThread = NULL;
         SIZE_T osThreadId = 0;
         palErr = InternalCreateThread(pthrCurrent,
@@ -1849,8 +1850,19 @@ namespace CorUnix
                 Poll.events = POLLIN;
                 Poll.revents = 0;
 
+#if 0
+            struct timeval t0;
+            struct timeval t1;
+            float elapsed;
+            gettimeofday(&t0, 0);
+#endif
                 iRet = poll(&Poll, 1, iTimeout);
 
+#if 0
+                gettimeofday(&t1, 0);
+                elapsed = (t1.tv_sec - t0.tv_sec) * 1000.0f + (t1.tv_usec - t0.tv_usec) / 1000.0f;
+        printf("Code executed in %f milliseconds. %d\n", elapsed, iRet);
+#endif
                 TRACE("Woken up from poll() with ret=%d [iTimeout=%d]\n",
                        iRet, iTimeout);
 
@@ -2801,6 +2813,11 @@ namespace CorUnix
             m_iProcessPipeRead = iPipeRd;
             m_iProcessPipeWrite = iPipeWr;
 #else // !CORECLR
+            if (m_iProcessPipeRead != -1)
+            {
+                close(m_iProcessPipeRead);
+                close(m_iProcessPipeWrite);
+            }
             m_iProcessPipeRead = rgiPipe[0];
             m_iProcessPipeWrite = rgiPipe[1];
 #endif // !CORECLR

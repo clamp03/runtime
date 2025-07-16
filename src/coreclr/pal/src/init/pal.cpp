@@ -595,7 +595,6 @@ Initialize(
             //
             // Tell the synchronization manager to start its worker thread
             //
-            // fprintf(stderr, "[CLAMP] %s %d %p\n", __PRETTY_FUNCTION__, __LINE__, pThread);
             g_pThread = pThread;
 #if 0
             // palError = CPalSynchMgrController::StartWorker(pThread);
@@ -694,6 +693,7 @@ PAL_InitializePreforked()
 {
     if (g_pThread)
     {
+        // CPalSynchronizationManager::CreateProcessPipe();
         return CPalSynchMgrController::StartWorker(g_pThread);
     }
     return 0;
