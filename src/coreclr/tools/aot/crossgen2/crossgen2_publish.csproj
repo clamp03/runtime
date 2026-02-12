@@ -10,10 +10,14 @@
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <AotOrSingleFile>true</AotOrSingleFile>
     <UseBootstrapLayout Condition="'$(UseBootstrap)' == 'true'">true</UseBootstrapLayout>
+    <RuntimeFrameworkVersion>11.0.0-dev</RuntimeFrameworkVersion>
     <!-- Workaround for dsymutil module cache errors on Apple platforms until https://github.com/dotnet/runtime/pull/123386 -->
     <!-- See https://github.com/dotnet/runtime/issues/123687 -->
     <StripSymbols Condition="'$(PortableOS)' == 'osx' or '$(PortableOS)' == 'ios' or '$(PortableOS)' == 'tvos' or '$(PortableOS)' == 'maccatalyst'">false</StripSymbols>
   </PropertyGroup>
+  <ItemGroup>
+    <KnownFrameworkReference Remove="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
   <Import Project="crossgen2.props" />
 </Project>

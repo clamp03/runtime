@@ -762,7 +762,7 @@ namespace ILCompiler.ObjectWriter
                 StringTableIndex = strTabSectionIndex < SHN_LORESERVE ? (ushort)strTabSectionIndex : (ushort)SHN_XINDEX,
                 Flags = _machine switch
                 {
-                    EM_ARM => 0x05000000u, // For ARM32 claim conformance with the EABI specification
+                    EM_ARM => 0x05000200u, // For ARM32 claim conformance with the EABI specification
                     EM_LOONGARCH => 0x43u, // For LoongArch ELF psABI specify the ABI version (1) and modifiers (64-bit GPRs, 64-bit FPRs)
                     EM_RISCV => 0x0005u, // EF_RISCV_RVC (RVC ABI) | EF_RISCV_FLOAT_ABI_DOUBLE (double precision floating-point ABI).
                     _ => 0u

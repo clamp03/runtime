@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.Build.NoTargets">
   <PropertyGroup>
     <BuildDebPackage>false</BuildDebPackage>
-    <BuildRpmPackage>true</BuildRpmPackage>
+    <BuildRpmPackage>false</BuildRpmPackage>
     <PackageTargetOS>opensuse.15</PackageTargetOS>
   </PropertyGroup>
 
