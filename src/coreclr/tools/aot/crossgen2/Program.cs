@@ -566,6 +566,9 @@ namespace ILCompiler
                                 }
                             }
 
+                            // Automatically discover and root concrete generic instantiations
+                            compilationRoots.Add(new ILScanBasedGenericInstantiationRootProvider(module));
+
                             if (!_command.CompositeOrInputBubble)
                             {
                                 break;
