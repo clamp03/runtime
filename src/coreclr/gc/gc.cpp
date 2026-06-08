@@ -4691,7 +4691,7 @@ public:
         // Called right after GCHeap::Init() for each heap
 
         uint32_t maxCpuCount = GCToOSInterface::GetMaxProcessorCount();
-        // The upper limit of the numa node numbers is maxCpuCount - 1 since in the worst case each processor could be on a different NUMA node. 
+        // The upper limit of the numa node numbers is maxCpuCount - 1 since in the worst case each processor could be on a different NUMA node.
         // We add +1 here to make it easier to calculate the heap number range for the last NUMA node.
         numa_node_to_heap_map = new (nothrow) uint16_t[maxCpuCount + 1];
         if (numa_node_to_heap_map == nullptr)
@@ -5790,6 +5790,12 @@ static void do_vxsort (uint8_t** item_array, ptrdiff_t item_count, uint8_t* rang
         }
     }
 #elif defined(TARGET_ARM64)
+    if (IsSupportedInstructionSet (InstructionSet::NEON) && (item_count > NEON_THRESHOLD_SIZE))
+    {
+        dprintf(3, ("Sorting mark lists"));
+        do_vxsort_neon (item_array, &item_array[item_count - 1], range_low, range_high);
+    }
+#elif defined(TARGET_ARM)
     if (IsSupportedInstructionSet (InstructionSet::NEON) && (item_count > NEON_THRESHOLD_SIZE))
     {
         dprintf(3, ("Sorting mark lists"));

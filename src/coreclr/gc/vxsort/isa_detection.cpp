@@ -32,6 +32,9 @@ SupportedISA DetermineSupportedISA()
 #elif defined(TARGET_ARM64)
     // Assume all Arm64 targets have NEON.
     return SupportedISA::NEON;
+#elif defined(TARGET_ARM)
+    // For Test, assume all Arm32 targets have NEON.
+    return SupportedISA::NEON;
 #endif
 }
 
@@ -44,6 +47,8 @@ bool IsSupportedInstructionSet (InstructionSet instructionSet)
 #if defined(TARGET_AMD64)
     assert(instructionSet == InstructionSet::AVX2 || instructionSet == InstructionSet::AVX512F);
 #elif defined(TARGET_ARM64)
+    assert(instructionSet == InstructionSet::NEON);
+#elif defined(TARGET_ARM)
     assert(instructionSet == InstructionSet::NEON);
 #endif
     return ((int)s_supportedISA & (1 << (int)instructionSet)) != 0;
