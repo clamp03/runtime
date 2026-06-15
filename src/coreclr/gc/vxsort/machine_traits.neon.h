@@ -34,6 +34,7 @@ static void not_supported()
 #define constexpr
 #endif  //_DEBUG
 
+#ifdef TARGET_ARM
 template <>
 class vxsort_machine_traits<uint32_t, NEON> {
    public:
@@ -48,45 +49,44 @@ class vxsort_machine_traits<uint32_t, NEON> {
     static const int32_t MaxInnerUnroll = 3;
     static const vector_machine SMALL_SORT_TYPE = vector_machine::NEON;
 
-    // Requires hardware support for a masked store.
     static constexpr bool supports_compress_writes() { return false; }
-
     static constexpr bool supports_packing() { return false; }
 
     template <int Shift>
-    static constexpr bool can_pack(T span) {
-        return false;
-    }
+    static constexpr bool can_pack(T span) { return false; }
 
     static INLINE TV load_vec(TV* p) { return vld1q_u32((T*)p); }
-
     static INLINE void store_vec(TV* ptr, TV v) { vst1q_u32((T*)ptr, v); }
-
     static void store_compress_vec(TV* ptr, TV v, TMASK mask) { not_supported(); }
 
     static INLINE TV partition_vector(TV v, TMASK mask) {
         assert(mask >= 0);
-        assert(mask <= 16);
-        uint8x16_t indexes = vld1q_u8((uint8_t*)(perm_table_32 + (mask * T32_LINE_SIZE)));
-        uint8x16_t partitioned = vqtbl1q_u8((uint8x16_t)v, indexes);
-        return (TV)partitioned;
+        assert(mask <= 15);
+        uint8_t *table_ptr = (uint8_t*)(perm_table_32 + (mask * T32_LINE_SIZE));
+        uint8x8x2_t v_split = {vget_low_u8((uint8x16_t)v), vget_high_u8((uint8x16_t)v)};
+        uint8x8_t indexes_lo = vld1_u8(table_ptr);
+        uint8x8_t indexes_hi = vld1_u8(table_ptr + 8);
+
+        uint8x8_t result_lo = vtbl2_u8(v_split, indexes_lo);
+        uint8x8_t result_hi = vtbl2_u8(v_split, indexes_hi);
+        return (TV)vcombine_u8(result_lo, result_hi);
     }
 
     static INLINE TV broadcast(T pivot) { return vdupq_n_u32(pivot); }
 
-    // Compare. Use mask to get one bit per lane. Add across into a single 64bit int.
     static INLINE TMASK get_cmpgt_mask(TV a, TV b) {
         const uint32_t compare_mask_array[4] = {0b01, 0b10, 0b100, 0b1000};
         TV compare_mask = vld1q_u32 (&compare_mask_array[0]);
-
-        return vaddvq_u32(vandq_u32(vcgtq_u32(a, b), compare_mask));
+        uint32x4_t cmp = vandq_u32(vcgtq_u32(a, b), compare_mask);
+        return vgetq_lane_u32(cmp, 0) | vgetq_lane_u32(cmp, 1) |
+               vgetq_lane_u32(cmp, 2) | vgetq_lane_u32(cmp, 3);
     }
 
     static TV shift_right(TV v, int i) { return vshlq_u32(v, vdupq_n_s32(-i)); }
     static TV shift_left(TV v, int i) { return (TV)vshlq_s32((int32x4_t)v, vdupq_n_s32(i)); }
 
     static INLINE TV add(TV a, TV b) { return vaddq_u32(a, b); }
-    static INLINE TV sub(TV a, TV b) { return vsubq_u32(a, b); };
+    static INLINE TV sub(TV a, TV b) { return vsubq_u32(a, b); }
 
     static INLINE TV pack_ordered(TV a, TV b) { not_supported(); return a; }
     static INLINE TV pack_unordered(TV a, TV b) { not_supported(); return a; }
@@ -94,8 +94,7 @@ class vxsort_machine_traits<uint32_t, NEON> {
 
     template <int Shift>
     static T shift_n_sub(T v, T sub) {
-        if (Shift > 0)
-            v >>= Shift;
+        if (Shift > 0) v >>= Shift;
         v -= sub;
         return v;
     }
@@ -104,16 +103,87 @@ class vxsort_machine_traits<uint32_t, NEON> {
     static T unshift_and_add(TPACK from, T add) {
         not_supported();
         add += from;
-        if (Shift > 0)
-            add = (T) (((TU) add) << Shift);
+        if (Shift > 0) add = (T) (((TU) add) << Shift);
         return add;
     }
 
     static INLINE T mask_popcount(TMASK mask) {
-        uint32x2_t maskv = vcreate_u32((uint64_t)mask);
-        return vaddv_u8(vcnt_u8(vreinterpret_u8_u32(maskv)));
+        return __builtin_popcount((uint32_t)mask);
     }
 };
+#else
+template <>
+class vxsort_machine_traits<uint32_t, NEON> {
+   public:
+    typedef uint32_t T;
+    typedef uint32x4_t TV;
+    typedef uint32_t TMASK;
+    typedef uint32_t TPACK;
+    typedef typename std::make_unsigned<T>::type TU;
+
+    static const int32_t MAX_BITONIC_SORT_VECTORS = 16;
+    static const int32_t SMALL_SORT_THRESHOLD_ELEMENTS = 32;
+    static const int32_t MaxInnerUnroll = 3;
+    static const vector_machine SMALL_SORT_TYPE = vector_machine::NEON;
+
+    static constexpr bool supports_compress_writes() { return false; }
+    static constexpr bool supports_packing() { return false; }
+
+    template <int Shift>
+    static constexpr bool can_pack(T span) { return false; }
+
+    static INLINE TV load_vec(TV* p) { return vld1q_u32((T*)p); }
+    static INLINE void store_vec(TV* ptr, TV v) { vst1q_u32((T*)ptr, v); }
+    static void store_compress_vec(TV* ptr, TV v, TMASK mask) { not_supported(); }
+
+    static INLINE TV partition_vector(TV v, TMASK mask) {
+        assert(mask >= 0);
+        assert(mask <= 15);
+        uint8x16_t indexes = vld1q_u8((uint8_t*)(perm_table_32 + (mask * T32_LINE_SIZE)));
+        uint8x16_t partitioned = vqtbl1q_u8((uint8x16_t)v, indexes);
+        return (TV)partitioned;
+    }
+
+    static INLINE TV broadcast(T pivot) { return vdupq_n_u32(pivot); }
+
+    static INLINE TMASK get_cmpgt_mask(TV a, TV b) {
+        const uint32_t compare_mask_array[4] = {0b01, 0b10, 0b100, 0b1000};
+        TV compare_mask = vld1q_u32 (&compare_mask_array[0]);
+        uint32x4_t cmp = vandq_u32(vcgtq_u32(a, b), compare_mask);
+        return vgetq_lane_u32(cmp, 0) | vgetq_lane_u32(cmp, 1) |
+               vgetq_lane_u32(cmp, 2) | vgetq_lane_u32(cmp, 3);
+    }
+
+    static TV shift_right(TV v, int i) { return vshlq_u32(v, vdupq_n_s32(-i)); }
+    static TV shift_left(TV v, int i) { return (TV)vshlq_s32((int32x4_t)v, vdupq_n_s32(i)); }
+
+    static INLINE TV add(TV a, TV b) { return vaddq_u32(a, b); }
+    static INLINE TV sub(TV a, TV b) { return vsubq_u32(a, b); }
+
+    static INLINE TV pack_ordered(TV a, TV b) { not_supported(); return a; }
+    static INLINE TV pack_unordered(TV a, TV b) { not_supported(); return a; }
+    static INLINE void unpack_ordered(TV p, TV& u1, TV& u2) { not_supported(); }
+
+    template <int Shift>
+    static T shift_n_sub(T v, T sub) {
+        if (Shift > 0) v >>= Shift;
+        v -= sub;
+        return v;
+    }
+
+    template <int Shift>
+    static T unshift_and_add(TPACK from, T add) {
+        not_supported();
+        add += from;
+        if (Shift > 0) add = (T) (((TU) add) << Shift);
+        return add;
+    }
+
+    static INLINE T mask_popcount(TMASK mask) {
+        return __builtin_popcount((uint32_t)mask);
+    }
+};
+#endif
 
 template <>
 class vxsort_machine_traits<uint64_t, NEON> {

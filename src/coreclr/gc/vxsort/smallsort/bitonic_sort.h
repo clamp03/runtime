@@ -29,6 +29,11 @@ extern "C" const uint8_t mask_table_8[M8_SIZE];
 const int M2_SIZE = (16 * 2);
 
 extern "C" const uint8_t mask_table_2[M2_SIZE];
+
+#elif defined(TARGET_ARM)
+const int M4_SIZE = (16 * 16);
+
+extern "C" const uint8_t mask_table_4[M4_SIZE];
 #endif
 
 template <typename T, vector_machine M>
