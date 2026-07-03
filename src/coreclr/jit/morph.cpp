@@ -1769,6 +1769,8 @@ void CallArgs::AddFinalArgsAndDetermineABIInfo(Compiler* comp, GenTreeCall* call
     info.IsVarArgs  = call->IsVarargs() && !call->IsTailCallViaJitHelper();
     info.HasThis    = call->gtArgs.HasThisPointer();
     info.HasRetBuff = call->gtArgs.HasRetBuffer();
+    // armel/SOFTFP experiment: managed<->managed calls use the hard-float convention for their arguments.
+    info.ForceHardFP = comp->compIsManagedHardFPCall(call);
     PlatformClassifier classifier(info);
 
     // Morph the user arguments
@@ -1865,6 +1867,8 @@ void CallArgs::DetermineABIInfo(Compiler* comp, GenTreeCall* call)
     info.IsVarArgs  = call->IsVarargs() && !call->IsTailCallViaJitHelper();
     info.HasThis    = call->gtArgs.HasThisPointer();
     info.HasRetBuff = call->gtArgs.HasRetBuffer();
+    // armel/SOFTFP experiment: managed<->managed calls use the hard-float convention for their arguments.
+    info.ForceHardFP = comp->compIsManagedHardFPCall(call);
     PlatformClassifier classifier(info);
 
     for (CallArg& arg : Args())

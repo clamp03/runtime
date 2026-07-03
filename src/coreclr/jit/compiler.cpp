@@ -50,9 +50,13 @@ MethodSet* Compiler::s_pJitMethodSet               = nullptr;
 
 #ifdef CONFIGURABLE_ARM_ABI
 // static
-bool GlobalJitOptions::compFeatureHfa          = false;
 LONG GlobalJitOptions::compUseSoftFPConfigured = 0;
 #endif // CONFIGURABLE_ARM_ABI
+#if defined(CONFIGURABLE_ARM_ABI) || (defined(TARGET_ARM) && defined(ARM_SOFTFP))
+// static - runtime-decided HFA availability (see jit.h). Defaults off; the managed-hard-float experiment
+// turns it on for armel.
+bool GlobalJitOptions::compFeatureHfa = false;
+#endif
 
 /*****************************************************************************
  *
@@ -2985,6 +2989,31 @@ void Compiler::compInitOptions(JitFlags* jitFlags)
 #elif defined(TARGET_ARM)
     assert(!jitFlags->IsSet(JitFlags::JIT_FLAG_SOFTFP_ABI));
 #endif // CONFIGURABLE_ARM_ABI
+
+#ifdef TARGET_ARM
+    // armel/SOFTFP experiment (DOTNET_JitManagedHardFP=1). Only meaningful when the base ABI is SOFTFP.
+    opts.compManagedHardFP = opts.compUseSoftFP && (JitConfig.JitManagedHardFP() != 0);
+    // This method's own parameters/return default to the base ABI. Under the experiment a normal managed
+    // method becomes hard-float, but a reverse-P/Invoke method is still entered from native SOFTFP code and
+    // must keep SOFTFP parameters/return.
+    opts.compSoftFPParams = opts.compUseSoftFP;
+    if (opts.compManagedHardFP && !jitFlags->IsSet(JitFlags::JIT_FLAG_REVERSE_PINVOKE))
+    {
+        opts.compSoftFPParams = false;
+    }
+    // Enable HFA (structs of 1-4 homogeneous floats/doubles passed/returned in VFP registers) whenever the
+    // hard-float experiment is on. The classifier's per-call SOFTFP gate and the per-method compSoftFPParams
+    // gate ensure HFA is only applied to hard-float signatures; native-boundary calls stay SOFTFP.
+    // Guarded to the builds where compFeatureHfa is mutable (see jit.h): CONFIGURABLE_ARM_ABI and armel/SOFTFP.
+    // On hard-float ARM/ARM64 compFeatureHfa is a compile-time const (always on) and compManagedHardFP is
+    // always false there anyway.
+#if defined(CONFIGURABLE_ARM_ABI) || defined(ARM_SOFTFP)
+    if (opts.compManagedHardFP)
+    {
+        GlobalJitOptions::compFeatureHfa = true;
+    }
+#endif
+#endif // TARGET_ARM
 
     opts.compScopeInfo = opts.compDbgInfo;
 

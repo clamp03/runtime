@@ -630,6 +630,22 @@ PTR_ReadyToRunInfo ReadyToRunInfo::Initialize(Module * pModule, AllocMemTracker 
 
     READYTORUN_HEADER * pHeader = pLayout->GetReadyToRunHeader();
 
+#if defined(TARGET_ARM) && defined(ARM_SOFTFP)
+    // armel/SOFTFP managed-hard-float experiment: an R2R image bakes in one managed float ABI (SOFTFP vs
+    // hard-float/VFP), recorded via READYTORUN_FLAG_ARM_MANAGED_HARDFP. Only use the image when its ABI matches
+    // the current runtime mode (DOTNET_JitManagedHardFP); otherwise skip it and let the JIT compile these
+    // methods with the correct ABI. This keeps hard-float JIT code and SOFTFP R2R code from ever mixing.
+    {
+        bool imageIsHardFP   = (pHeader->CoreHeader.Flags & READYTORUN_FLAG_ARM_MANAGED_HARDFP) != 0;
+        bool runtimeIsHardFP = CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_JitManagedHardFP) != 0;
+        if (imageIsHardFP != runtimeIsHardFP)
+        {
+            DoLog("Ready to Run disabled - managed float ABI (SOFTFP vs hard-float) mismatch with DOTNET_JitManagedHardFP");
+            return NULL;
+        }
+    }
+#endif // TARGET_ARM && ARM_SOFTFP
+
 #ifdef FEATURE_DYNAMIC_CODE_COMPILED
     if ((pHeader->CoreHeader.Flags & READYTORUN_FLAG_STRIPPED_IL_BODIES) != 0)
     {

@@ -1577,7 +1577,13 @@ void Lowering::LowerArg(GenTreeCall* call, CallArg* callArg)
     DBEXEC(m_compiler->verbose, abiInfo.Dump());
 
 #if !defined(TARGET_64BIT) && !defined(TARGET_WASM)
-    if (m_compiler->opts.compUseSoftFP && arg->TypeIs(TYP_DOUBLE))
+    // armel/SOFTFP experiment: only decompose the double into an integer pair when this specific call passes
+    // it via core registers (SOFTFP). Managed hard-float calls keep it in a VFP (double) register.
+    bool argUsesSoftFP = m_compiler->opts.compUseSoftFP;
+#ifdef TARGET_ARM
+    argUsesSoftFP = argUsesSoftFP && !m_compiler->compIsManagedHardFPCall(call);
+#endif
+    if (argUsesSoftFP && arg->TypeIs(TYP_DOUBLE))
     {
         // Unlike TYP_LONG we do no decomposition for doubles, yet we maintain
         // it as a primitive type until lowering. So we need to get it into the

@@ -3195,13 +3195,16 @@ void CodeGen::genCall(GenTreeCall* call)
         else
         {
 #ifdef TARGET_ARM
+            // armel/SOFTFP experiment: a managed->managed callee returns floats via VFP (hard-float); the
+            // native boundary (P/Invoke, helpers) still returns via core registers (SOFTFP).
+            const bool calleeUsesSoftFP = m_compiler->opts.compUseSoftFP && !m_compiler->compIsManagedHardFPCall(call);
             if (call->IsHelperCall(CORINFO_HELP_INIT_PINVOKE_FRAME))
             {
                 // The CORINFO_HELP_INIT_PINVOKE_FRAME helper uses a custom calling convention that returns with
                 // TCB in REG_PINVOKE_TCB. fgMorphCall() sets the correct argument registers.
                 returnReg = REG_PINVOKE_TCB;
             }
-            else if (m_compiler->opts.compUseSoftFP)
+            else if (calleeUsesSoftFP)
             {
                 returnReg = REG_INTRET;
             }
@@ -3226,11 +3229,11 @@ void CodeGen::genCall(GenTreeCall* call)
             if (call->GetRegNum() != returnReg)
             {
 #ifdef TARGET_ARM
-                if (m_compiler->opts.compUseSoftFP && returnType == TYP_DOUBLE)
+                if (calleeUsesSoftFP && returnType == TYP_DOUBLE)
                 {
                     inst_RV_RV_RV(INS_vmov_i2d, call->GetRegNum(), returnReg, REG_NEXT(returnReg), EA_8BYTE);
                 }
-                else if (m_compiler->opts.compUseSoftFP && returnType == TYP_FLOAT)
+                else if (calleeUsesSoftFP && returnType == TYP_FLOAT)
                 {
                     inst_Mov(returnType, call->GetRegNum(), returnReg, /* canSkip */ false);
                 }

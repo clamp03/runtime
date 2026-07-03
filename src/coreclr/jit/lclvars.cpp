@@ -657,7 +657,7 @@ void Compiler::lvaInitUserArgs(unsigned* curVarNum, unsigned skipArgs, unsigned 
         }
 #endif
 
-        if (info.compIsVarArgs || (opts.compUseSoftFP && varTypeIsFloating(varDsc)))
+        if (info.compIsVarArgs || (opts.compSoftFPParams && varTypeIsFloating(varDsc)))
         {
 #ifndef TARGET_X86
             // TODO-CQ: We shouldn't have to go as far as to declare these
@@ -1001,7 +1001,7 @@ void Compiler::lvaClassifyParameterABI(Classifier& classifier)
     {
         const ABIPassingInformation& abiInfo  = lvaGetParameterABIInfo(i);
         LclVarDsc*                   varDsc   = lvaGetDesc(i);
-        bool                         preSpill = opts.compUseSoftFP && varTypeIsFloating(varDsc);
+        bool                         preSpill = opts.compSoftFPParams && varTypeIsFloating(varDsc);
         preSpill |= varDsc->TypeIs(TYP_STRUCT);
 
         if (!preSpill)
@@ -1070,6 +1070,9 @@ void Compiler::lvaClassifyParameterABI()
     cInfo.IsVarArgs  = info.compIsVarArgs;
     cInfo.HasThis    = info.compThisArg != BAD_VAR_NUM;
     cInfo.HasRetBuff = info.compRetBuffArg != BAD_VAR_NUM;
+    // armel/SOFTFP experiment: a normal managed method receives its parameters in the hard-float convention;
+    // only reverse-P/Invoke methods (called from native SOFTFP code) keep SOFTFP parameters.
+    cInfo.ForceHardFP = opts.compUseSoftFP && !opts.compSoftFPParams;
 
 #ifdef SWIFT_SUPPORT
     if (info.compCallConv == CorInfoCallConvExtension::Swift)

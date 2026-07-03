@@ -359,7 +359,14 @@ void MethodDescCallSite::CallTargetWorker(const ARG_SLOT *pArguments, ARG_SLOT *
             *((LPVOID*)(pTransitionBlock + m_argIt.GetRetBuffArgOffset())) = ArgSlotToPtr(pArguments[arg++]);
         }
 #ifdef FEATURE_HFA
-        else if (ELEMENT_TYPE_VALUETYPE == m_methodSig.GetReturnTypeNormalized())
+        else if (ELEMENT_TYPE_VALUETYPE == m_methodSig.GetReturnTypeNormalized()
+#if defined(TARGET_ARM) && defined(ARM_SOFTFP)
+                 // armel/SOFTFP: the enregistered-HFA-return convention (caller passes a buffer that the FP
+                 // return regs are copied into) only applies to hard-float signatures. In SOFTFP mode a
+                 // valuetype return does not consume this buffer arg.
+                 && IsArmManagedHardFPEnabled()
+#endif
+                 )
         {
             pvRetBuff = ArgSlotToPtr(pArguments[arg++]);
         }

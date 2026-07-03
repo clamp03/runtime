@@ -276,6 +276,9 @@ CONFIG_DWORD_INFO(INTERNAL_GCUseGlobalAllocationContext, W("GCUseGlobalAllocatio
 ///
 CONFIG_DWORD_INFO(INTERNAL_JitBreakEmit, W("JitBreakEmit"), (DWORD)-1, "")
 RETAIL_CONFIG_DWORD_INFO(EXTERNAL_JitDebuggable, W("JitDebuggable"), 0, "If set, suppress JIT optimizations that make debugging code difficult")
+// armel/SOFTFP experiment: mirrors the JIT's DOTNET_JitManagedHardFP knob so the VM's ArgIterator can use the
+// hard-float convention for managed signatures (e.g. reflection Invoke via CallDescrWorker). Same env var as JIT.
+RETAIL_CONFIG_DWORD_INFO(EXTERNAL_JitManagedHardFP, W("JitManagedHardFP"), 0, "armel: managed<->managed calls use hard-float (VFP); native boundary stays SOFTFP")
 #if !defined(DEBUG) && !defined(_DEBUG)
 #define INTERNAL_JitEnableNoWayAssert_Default 0
 #else

@@ -156,6 +156,15 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             int flagsInt = (int)_flags;
             if (!relocsOnly)
             {
+                // armel/SOFTFP experiment: if the JIT is generating hard-float managed code
+                // (DOTNET_JitManagedHardFP, forwarded as a codegen option), stamp the image so the runtime only
+                // uses it when running in matching (hard-float) mode. Read here (not in GetReadyToRunFlags)
+                // because JitConfigProvider.Instance is only initialized once compilation has started.
+                if (Internal.JitInterface.JitConfigProvider.Instance.GetIntConfigValue("JitManagedHardFP", 0) != 0)
+                {
+                    flagsInt |= (int)ReadyToRunFlags.READYTORUN_FLAG_ArmManagedHardFP;
+                }
+
                 if (_shouldAddSkipTypeValidationFlag.Result.canSkipValidation)
                 {
                     flagsInt |= (int)ReadyToRunFlags.READYTORUN_FLAG_SkipTypeValidation;

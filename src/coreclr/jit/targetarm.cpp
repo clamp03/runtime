@@ -57,7 +57,11 @@ ABIPassingInformation Arm32Classifier::Classify(Compiler*    comp,
                                                 ClassLayout* structLayout,
                                                 WellKnownArg wellKnownParam)
 {
-    if (!comp->opts.compUseSoftFP)
+    // Base ABI is SOFTFP on armel, but the managed-hard-float experiment can force individual signatures
+    // (managed<->managed calls, and non-reverse-P/Invoke method params) onto the VFP convention.
+    const bool useSoftFP = comp->opts.compUseSoftFP && !m_info.ForceHardFP;
+
+    if (!useSoftFP)
     {
         if (varTypeIsStruct(type))
         {

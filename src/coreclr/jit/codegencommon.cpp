@@ -7361,7 +7361,7 @@ void CodeGen::genReturn(GenTree* treeNode)
             }
             else
 #elif defined(TARGET_ARM)
-            if (varTypeUsesFloatReg(treeNode) && (m_compiler->opts.compUseSoftFP || m_compiler->info.compIsVarArgs))
+            if (varTypeUsesFloatReg(treeNode) && (m_compiler->opts.compSoftFPParams || m_compiler->info.compIsVarArgs))
             {
                 if (targetType == TYP_FLOAT)
                 {

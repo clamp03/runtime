@@ -232,6 +232,15 @@ protected:
         return th.AsMethodTable()->IsRegPassedStruct();
     }
 
+#if defined(TARGET_ARM) && defined(ARM_SOFTFP)
+    // armel/SOFTFP experiment: reflection invokes managed methods, which use the hard-float (VFP) convention
+    // when the experiment is enabled. Matches ArgIteratorBase::ArgsUseHardFP().
+    FORCEINLINE bool ArgsUseHardFP()
+    {
+        return IsArmManagedHardFPEnabled();
+    }
+#endif // TARGET_ARM && ARM_SOFTFP
+
 #if defined(UNIX_AMD64_ABI)
     FORCEINLINE SystemVEightByteRegistersInfo GetEightByteRegistersInfo(TypeHandle th)
     {

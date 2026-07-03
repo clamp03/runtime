@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Managed IL is architecture-independent; build once on the host and push the .dll to the armel
+         device, then run it with the freshly-built corerun there. -->
+    <TargetFramework>net11.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>HardFPTest</AssemblyName>
+  </PropertyGroup>
+
+</Project>

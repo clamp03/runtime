@@ -177,6 +177,9 @@ struct ClassifierInfo
     bool                     IsVarArgs  = false;
     bool                     HasThis    = false;
     bool                     HasRetBuff = false;
+    // armel/SOFTFP experiment: classify floating-point values using the hard-float (VFP) convention even
+    // though the base ABI is SOFTFP. Only consulted by the Arm32 classifier; ignored elsewhere.
+    bool                     ForceHardFP = false;
 };
 
 class X86Classifier

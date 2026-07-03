@@ -23,6 +23,7 @@ namespace Internal.ReadyToRunConstants
         READYTORUN_FLAG_StrippedILBodies = 0x00000200,         // IL method bodies have been stripped from the image
         READYTORUN_FLAG_StrippedInliningInfo = 0x00000400,     // Inlining info has been stripped from the image
         READYTORUN_FLAG_StrippedDebugInfo = 0x00000800,        // Debug info has been stripped from the image
+        READYTORUN_FLAG_ArmManagedHardFP = 0x00001000,         // (armel experiment) managed code uses the hard-float (VFP) calling convention instead of SOFTFP
     }
 
     public enum ReadyToRunImportSectionType : byte

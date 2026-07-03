@@ -43,6 +43,16 @@ void Rationalizer::RewriteNodeAsCall(GenTree**             use,
     // Create the call node
     GenTreeCall* call = m_compiler->gtNewCallNode(CT_USER_FUNC, callHnd, tree->TypeGet());
 
+#ifdef TARGET_ARM
+    // The normal call-import path copies GTF_CALL_M_NOGCCHECK from CORINFO_FLG_NOGCCHECK, but an intrinsic
+    // (e.g. Math.Pow/Ceiling) is rematerialized as a call here and would otherwise miss it. Carry it over so
+    // the armel managed-hard-float ABI decision can tell this fallback targets a native (SOFTFP) FCall.
+    if ((callHnd != NULL) && ((m_compiler->info.compCompHnd->getMethodAttribs(callHnd) & CORINFO_FLG_NOGCCHECK) != 0))
+    {
+        call->gtCallMoreFlags |= GTF_CALL_M_NOGCCHECK;
+    }
+#endif // TARGET_ARM
+
     if (isSpecialIntrinsic)
     {
 #if defined(TARGET_XARCH)

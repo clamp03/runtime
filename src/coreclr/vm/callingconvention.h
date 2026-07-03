@@ -21,6 +21,27 @@
 
 BOOL IsRetBuffPassedAsFirstArg();
 
+#if defined(TARGET_ARM) && defined(ARM_SOFTFP)
+// armel/SOFTFP experiment (DOTNET_JitManagedHardFP=1): the base ABI is SOFTFP, but managed<->managed calls use
+// the hard-float (VFP) convention. This mirrors the JIT-side knob so the VM's ArgIterator lays out managed
+// signatures the same way the JIT does (needed for reflection Invoke / CallDescrWorker, delegate/stub shuffles).
+inline bool IsArmManagedHardFPEnabled()
+{
+#ifdef DACCESS_COMPILE
+    // The DAC has no access to the target's JIT config here; assume the default (SOFTFP) layout. This only
+    // affects debugger stackwalks of hard-float frames under the experiment, not runtime correctness.
+    return false;
+#else
+    static int s_state = -1;
+    if (s_state < 0)
+    {
+        s_state = (CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_JitManagedHardFP) != 0) ? 1 : 0;
+    }
+    return s_state != 0;
+#endif
+}
+#endif // TARGET_ARM && ARM_SOFTFP
+
 // Describes how a single argument is laid out in registers and/or stack locations when given as an input to a
 // managed method as part of a larger signature.
 //
@@ -1556,8 +1577,15 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
 
     // Ignore floating point argument placement in registers if we're dealing with a vararg function (the ABI
     // specifies this so that vararg processing on the callee side is simplified).
-#ifndef ARM_SOFTFP
-    if (fFloatingPoint && !this->IsVarArg())
+    // On hard-float builds, floating point primitives always go in VFP registers. On SOFTFP builds they go in
+    // core registers, EXCEPT under the managed-hard-float experiment where managed (not P/Invoke) signatures
+    // use VFP; ArgsUseHardFP() encodes that per-signature decision.
+#ifdef ARM_SOFTFP
+    const bool fUseVFPRegs = fFloatingPoint && !this->IsVarArg() && this->ArgsUseHardFP();
+#else
+    const bool fUseVFPRegs = fFloatingPoint && !this->IsVarArg();
+#endif
+    if (fUseVFPRegs)
     {
         // Handle floating point (primitive) arguments.
 
@@ -1611,7 +1639,6 @@ int ArgIteratorTemplate<ARGITERATOR_BASE>::GetNextOffset()
 
         return argOfs;
     }
-#endif // ARM_SOFTFP
 
     //
     // Handle the non-floating point case.
@@ -1979,20 +2006,24 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
     case ELEMENT_TYPE_R4:
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
         flags |= (FpStruct::OnlyOne | (2 << FpStruct::PosSizeShift1st)) << RETURN_FP_SIZE_SHIFT;
+#elif defined(ARM_SOFTFP)
+        // armel/SOFTFP experiment: a managed method returns floats in a VFP register (d0/s0); SOFTFP returns
+        // them in the integer return register (no FP return size flag).
+        if (this->ArgsUseHardFP())
+            flags |= sizeof(float) << RETURN_FP_SIZE_SHIFT;
 #else
-#ifndef ARM_SOFTFP
         flags |= sizeof(float) << RETURN_FP_SIZE_SHIFT;
-#endif
 #endif
         break;
 
     case ELEMENT_TYPE_R8:
 #if defined(TARGET_LOONGARCH64) || defined(TARGET_RISCV64)
         flags |= (FpStruct::OnlyOne | (3 << FpStruct::PosSizeShift1st)) << RETURN_FP_SIZE_SHIFT;
+#elif defined(ARM_SOFTFP)
+        if (this->ArgsUseHardFP())
+            flags |= sizeof(double) << RETURN_FP_SIZE_SHIFT;
 #else
-#ifndef ARM_SOFTFP
         flags |= sizeof(double) << RETURN_FP_SIZE_SHIFT;
-#endif
 #endif
         break;
 
@@ -2035,7 +2066,12 @@ void ArgIteratorTemplate<ARGITERATOR_BASE>::ComputeReturnFlags()
 #else // UNIX_AMD64_ABI
 
 #ifdef FEATURE_HFA
-            if (thValueType.IsHFA() && !this->IsVarArg())
+            if (thValueType.IsHFA() && !this->IsVarArg()
+#if defined(TARGET_ARM) && defined(ARM_SOFTFP)
+                // armel/SOFTFP: only return an HFA struct in VFP registers for hard-float (managed) signatures.
+                && this->ArgsUseHardFP()
+#endif
+                )
             {
                 CorInfoHFAElemType hfaType = thValueType.GetHFAType();
 
@@ -2306,6 +2342,15 @@ protected:
         return th.AsMethodTable()->IsRegPassedStruct();
     }
 
+#if defined(TARGET_ARM) && defined(ARM_SOFTFP)
+    // armel/SOFTFP experiment: a managed signature uses the hard-float (VFP) convention when the experiment is
+    // enabled. Overridden to FALSE for P/Invoke (native) signatures, which always stay SOFTFP.
+    FORCEINLINE bool ArgsUseHardFP()
+    {
+        return IsArmManagedHardFPEnabled();
+    }
+#endif // TARGET_ARM && ARM_SOFTFP
+
 #if defined(UNIX_AMD64_ABI)
     FORCEINLINE SystemVEightByteRegistersInfo GetEightByteRegistersInfo(TypeHandle th)
     {
@@ -2398,6 +2443,15 @@ class ArgIteratorBaseForPInvoke : public ArgIteratorBase
 {
 protected:
     BOOL IsRegPassedStruct(TypeHandle th);
+
+#if defined(TARGET_ARM) && defined(ARM_SOFTFP)
+    // P/Invoke (native) signatures always use the SOFTFP convention regardless of the managed-hard-float
+    // experiment: the native callee is compiled -mfloat-abi=softfp.
+    FORCEINLINE bool ArgsUseHardFP()
+    {
+        return false;
+    }
+#endif // TARGET_ARM && ARM_SOFTFP
 
 #if defined(UNIX_AMD64_ABI)
     SystemVEightByteRegistersInfo GetEightByteRegistersInfo(TypeHandle th);

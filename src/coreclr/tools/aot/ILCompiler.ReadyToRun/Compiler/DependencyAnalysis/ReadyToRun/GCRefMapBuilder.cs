@@ -67,7 +67,21 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             _transitionBlock = TransitionBlock.FromTarget(target.Architecture,
                 target.OperatingSystem == TargetOS.Windows,
                 target.IsApplePlatform,
-                target.Abi == TargetAbi.NativeAotArmel);
+                IsArmelSoftFP(target));
+        }
+
+        // armel/SOFTFP experiment: when DOTNET_JitManagedHardFP is set, managed code (and thus the R2R code this
+        // GC ref map describes) uses the hard-float (VFP) convention -- which for managed signatures matches
+        // armhf. Report "not armel" so the calling-convention engine places floats/HFAs in VFP and the GC ref
+        // map records GC-ref args at the matching (hard-float) core-register/stack positions, agreeing with the
+        // runtime/JIT. (Fixes the "GC ref map mismatch" assert for hard-float R2R images.)
+        internal static bool IsArmelSoftFP(TargetDetails target)
+        {
+            if (target.Abi != TargetAbi.NativeAotArmel)
+                return false;
+            Internal.JitInterface.JitConfigProvider cfg = Internal.JitInterface.JitConfigProvider.InstanceOrNull;
+            bool hardFP = cfg != null && cfg.GetIntConfigValue("JitManagedHardFP", 0) != 0;
+            return !hardFP;
         }
 
         internal static (ArgIterator<TypeHandle>, TransitionBlock) BuildArgIterator(MethodSignature signature, TypeSystemContext context, bool methodRequiresInstArg = false, bool isUnboxingStub = false, bool methodIsArrayAddressMethod = false, bool methodIsStringConstructor = false, bool methodIsAsyncCall = false)
@@ -75,7 +89,7 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             TransitionBlock transitionBlock = TransitionBlock.FromTarget(context.Target.Architecture,
                 context.Target.OperatingSystem == TargetOS.Windows,
                 context.Target.IsApplePlatform,
-                context.Target.Abi == TargetAbi.NativeAotArmel);
+                IsArmelSoftFP(context.Target));
 
             bool hasThis = (signature.Flags & MethodSignatureFlags.Static) == 0;
 

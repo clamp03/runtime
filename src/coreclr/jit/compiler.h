@@ -5736,6 +5736,11 @@ private:
 
     var_types mangleVarArgsType(var_types type);
 
+    // armel/SOFTFP experiment: true if this specific call is a managed->managed call that should use the
+    // hard-float (VFP) convention. Native-boundary calls (P/Invoke and JIT helpers) keep SOFTFP and return
+    // false. Always false unless DOTNET_JitManagedHardFP=1 on a SOFTFP target.
+    bool compIsManagedHardFPCall(GenTreeCall* call);
+
     regNumber getCallArgIntRegister(regNumber floatReg);
     regNumber getCallArgFloatRegister(regNumber intReg);
 
@@ -11395,6 +11400,16 @@ public:
         static const bool compUseSoftFP = false;
 #endif // ARM_SOFTFP
 #endif // CONFIGURABLE_ARM_ABI
+
+        // armel/SOFTFP experiment (DOTNET_JitManagedHardFP=1): when true, the base ABI is SOFTFP but
+        // managed<->managed calls use the hard-float (VFP) convention; only the native boundary stays SOFTFP.
+        //   compManagedHardFP - the feature is enabled (only ever true when compUseSoftFP is also true).
+        //   compSoftFPParams  - whether THIS method's own parameters/return use SOFTFP. False for a normal
+        //                       managed method under the experiment (it is hard-float), true for a
+        //                       reverse-P/Invoke method (called from native SOFTFP code) or when the
+        //                       experiment is off (preserves the default behavior).
+        bool compManagedHardFP = false;
+        bool compSoftFPParams  = false;
 
         // Collect 64 bit counts for PGO data.
         bool compCollect64BitCounts;

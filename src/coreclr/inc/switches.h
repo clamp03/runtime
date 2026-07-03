@@ -146,7 +146,10 @@
 // do not work reliably with conservative GC.
 #define FEATURE_CONSERVATIVE_GC 1
 
-#if (defined(TARGET_ARM) && (!defined(ARM_SOFTFP) || defined(CONFIGURABLE_ARM_ABI))) || defined(TARGET_ARM64)
+// FEATURE_HFA is enabled for all ARM targets (including armel/SOFTFP) so the HFA machinery is compiled in;
+// whether a struct is actually PASSED/RETURNED as an HFA is gated at runtime by the managed-hard-float
+// experiment (DOTNET_JitManagedHardFP) in the ABI classifiers, so default SOFTFP behavior is unaffected.
+#if defined(TARGET_ARM) || defined(TARGET_ARM64)
 #define FEATURE_HFA
 #endif
 

@@ -469,10 +469,14 @@ public:
 #ifdef CONFIGURABLE_ARM_ABI
     // These are safe to have globals as they cannot change once initialized within the process.
     static LONG compUseSoftFPConfigured;
-    static bool compFeatureHfa;
-#else  // !CONFIGURABLE_ARM_ABI
-    static const bool compFeatureHfa = true;
 #endif // CONFIGURABLE_ARM_ABI
+#if defined(CONFIGURABLE_ARM_ABI) || (defined(TARGET_ARM) && defined(ARM_SOFTFP))
+    // HFA availability is decided at runtime: on CONFIGURABLE_ARM_ABI, and on armel/SOFTFP where the
+    // managed-hard-float experiment (DOTNET_JitManagedHardFP) turns it on. Process-constant once set.
+    static bool compFeatureHfa;
+#else  // always-on (arm64, hard-float arm)
+    static const bool compFeatureHfa = true;
+#endif
 #else  // !FEATURE_HFA
     static const bool compFeatureHfa = false;
 #endif // FEATURE_HFA

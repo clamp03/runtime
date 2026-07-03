@@ -481,6 +481,11 @@ HRESULT EEConfig::sync()
 
 #if defined(FEATURE_READYTORUN)
     fReadyToRun = CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_ReadyToRun);
+    // NOTE (armel/SOFTFP managed-hard-float experiment): R2R is NOT force-disabled here when
+    // DOTNET_JitManagedHardFP is set. Instead each R2R image is accepted only if its baked-in managed float
+    // ABI matches the runtime mode (see READYTORUN_FLAG_ARM_MANAGED_HARDFP handling in readytoruninfo.cpp).
+    // That way a hard-float-crossgen'd image is used under the experiment, while a stale SOFTFP image is
+    // safely skipped (JIT fallback) instead of silently mismatching.
 #if defined(FEATURE_INTERPRETER)
     if (fReadyToRun && CLRConfig::GetConfigValue(CLRConfig::EXTERNAL_InterpMode) >= 2)
     {

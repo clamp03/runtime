@@ -104,6 +104,7 @@ enum ReadyToRunFlag
     READYTORUN_FLAG_STRIPPED_IL_BODIES          = 0x00000200,   // IL method bodies have been stripped from the image
     READYTORUN_FLAG_STRIPPED_INLINING_INFO      = 0x00000400,   // Inlining info has been stripped from the image
     READYTORUN_FLAG_STRIPPED_DEBUG_INFO         = 0x00000800,   // Debug info has been stripped from the image
+    READYTORUN_FLAG_ARM_MANAGED_HARDFP          = 0x00001000,   // (armel experiment) managed code in this image uses the hard-float (VFP) calling convention instead of SOFTFP. The runtime must only use this image when DOTNET_JitManagedHardFP is set to a matching value.
 };
 
 enum class ReadyToRunSectionType : uint32_t

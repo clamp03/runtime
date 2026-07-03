@@ -26,6 +26,9 @@ namespace Internal.JitInterface
             }
         }
 
+        // Null-safe accessor for callers that may run before the JIT config is initialized (e.g. type layout).
+        public static JitConfigProvider InstanceOrNull => s_instance;
+
         [FixedAddressValueType]
         private static readonly JitConfigProviderVtbl s_JitConfigProviderVtbl;
 

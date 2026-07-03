@@ -895,6 +895,16 @@ CONFIG_INTEGER(JitSaveFpLrWithCalleeSavedRegisters, "JitSaveFpLrWithCalleeSavedR
 CONFIG_INTEGER(JitUseScalableVectorT, "JitUseScalableVectorT", 0)
 #endif // defined(TARGET_ARM64)
 
+#if defined(TARGET_ARM)
+// JitManagedHardFP (armel/SOFTFP targets only):
+//    0: default - managed code uses the SOFTFP calling convention everywhere (matches native ABI).
+//    1: EXPERIMENTAL - managed<->managed calls use the hard-float (VFP) calling convention, while the
+//       native boundary (P/Invoke, JIT helpers, reverse P/Invoke) keeps SOFTFP. Eliminates the
+//       VFP<->core-register vmov round-trip on managed float call boundaries. Requires matching VM-side
+//       ArgIterator changes for full runtime bring-up; safe to leave off.
+CONFIG_INTEGER(JitManagedHardFP, "JitManagedHardFP", 0)
+#endif // defined(TARGET_ARM)
+
 #if defined(TARGET_LOONGARCH64)
 // Disable emitDispIns by default
 CONFIG_INTEGER(JitDispIns, "JitDispIns", 0)

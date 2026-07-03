@@ -3020,7 +3020,9 @@ inline unsigned Compiler::compMapILargNum(unsigned ILargNum)
 inline var_types Compiler::mangleVarArgsType(var_types type)
 {
 #if defined(TARGET_ARMARCH)
-    if (opts.compUseSoftFP || (TargetOS::IsWindows && info.compIsVarArgs))
+    // Use compSoftFPParams (not compUseSoftFP) so a managed hard-float method does not mangle its own
+    // float/double args to int/long; reverse-P/Invoke methods and the default SOFTFP case still mangle.
+    if (opts.compSoftFPParams || (TargetOS::IsWindows && info.compIsVarArgs))
     {
         switch (type)
         {
@@ -3040,6 +3042,18 @@ inline var_types Compiler::mangleVarArgsType(var_types type)
     }
 #endif // defined(TARGET_ARMARCH)
     return type;
+}
+
+// armel/SOFTFP experiment: true if this specific call is a managed->managed call that should use the
+// hard-float (VFP) convention. Native-boundary calls keep SOFTFP:
+//   - IsUnmanaged(): explicit P/Invoke / unmanaged calli (and QCalls, which appear as P/Invoke).
+//   - IsHelperCall(): JIT helpers (e.g. CORINFO_HELP_DBLREM), compiled into the SOFTFP runtime.
+//   - GTF_CALL_M_NOGCCHECK: set at import from CORINFO_FLG_NOGCCHECK, which the VM sets exactly for FCalls
+//     (MethodDesc::IsFCall) -- native methods compiled -mfloat-abi=softfp (e.g. Math.Round).
+inline bool Compiler::compIsManagedHardFPCall(GenTreeCall* call)
+{
+    return opts.compManagedHardFP && !call->IsUnmanaged() && !call->IsHelperCall() &&
+           ((call->gtCallMoreFlags & GTF_CALL_M_NOGCCHECK) == 0);
 }
 
 // For CORECLR there is no vararg on System V systems.
