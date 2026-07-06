@@ -185,6 +185,10 @@ class vxsort_machine_traits<uint32_t, NEON> {
 };
 #endif
 
+#ifndef TARGET_ARM
+// ARM32 only sorts 32-bit pointers, so the 64-bit specialization is never
+// instantiated. It also relies on AArch64-only intrinsics (vqtbl1q_u8,
+// vcgtq_u64, vaddvq_u64, vaddv_u8), so exclude it from ARMv7-A builds.
 template <>
 class vxsort_machine_traits<uint64_t, NEON> {
    public:
@@ -282,6 +286,7 @@ class vxsort_machine_traits<uint64_t, NEON> {
         return vaddv_u8(vcnt_u8(vreinterpret_u8_u64(maskv)));
     }
 };
+#endif // !TARGET_ARM
 
 }
 

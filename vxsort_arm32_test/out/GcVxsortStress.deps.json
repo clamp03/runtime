@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v11.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v11.0": {
+      "GcVxsortStress/11.0.0-dev": {
+        "runtime": {
+          "GcVxsortStress.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "GcVxsortStress/11.0.0-dev": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

@@ -31,14 +31,14 @@ set (VXSORT_TARGET_SOURCES
 )
 endif(CLR_CMAKE_TARGET_ARCH_AMD64)
 
-if(CLR_CMAKE_TARGET_ARCH_ARM64)
+if(CLR_CMAKE_TARGET_ARCH_ARM OR CLR_CMAKE_TARGET_ARCH_ARM64)
 set (VXSORT_TARGET_SOURCES
   do_vxsort_neon.cpp
   machine_traits.neon.cpp
   smallsort/bitonic_sort.NEON.uint32_t.generated.cpp
   smallsort/bitonic_sort.scalar.uint64_t.generated.cpp
 )
-endif(CLR_CMAKE_TARGET_ARCH_ARM64)
+endif(CLR_CMAKE_TARGET_ARCH_ARM OR CLR_CMAKE_TARGET_ARCH_ARM64)
 
 add_library(gc_vxsort OBJECT ${VXSORT_SOURCES} ${VXSORT_TARGET_SOURCES})
 

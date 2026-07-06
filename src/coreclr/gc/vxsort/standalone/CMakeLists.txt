@@ -7,9 +7,16 @@ if( ${ARCHITECTURE} STREQUAL "aarch64" )
     add_compile_definitions(TARGET_ARM64)
     add_compile_definitions(CPU_FEATURES_ARCH_AARCH64)
 endif()
+
 if( ${ARCHITECTURE} STREQUAL "x86_64" )
     add_compile_definitions(TARGET_AMD64)
     add_compile_definitions(CPU_FEATURES_ARCH_X86)
+endif()
+
+if( ${ARCHITECTURE} MATCHES "^armv" )
+    add_compile_definitions(TARGET_ARM)
+    add_compile_definitions(CPU_FEATURES_ARCH_ARM)
+    add_compile_options(-mfpu=neon)
 endif()
 add_compile_definitions(TARGET_UNIX)
 add_compile_definitions(CLR_CMAKE_HOST_UNIX)
@@ -43,7 +50,7 @@ set (VXSORT_TARGET_SOURCES
   ../smallsort/avx2_load_mask_tables.cpp
 )
 endif()
-if( ${ARCHITECTURE} STREQUAL "aarch64" )
+if( ${ARCHITECTURE} STREQUAL "aarch64" OR ${ARCHITECTURE} MATCHES "^armv" )
 set (VXSORT_TARGET_SOURCES
   ../do_vxsort_neon.cpp
   ../machine_traits.neon.cpp

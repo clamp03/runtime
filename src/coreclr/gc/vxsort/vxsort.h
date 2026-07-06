@@ -248,7 +248,7 @@ private:
             // * Since we'd like to avoid that, we adjust for post-alignment
             // * No branches since we do branch->arithmetic
             auto preAlignedLeft = reinterpret_cast<T*>(reinterpret_cast<size_t>(left) & ~ALIGN_MASK);
-            auto cannotPreAlignLeft = (preAlignedLeft - _startPtr) >> 63;
+            auto cannotPreAlignLeft = (preAlignedLeft - _startPtr) >> (8 * sizeof(ptrdiff_t) - 1);
             realignHint.left_align = (preAlignedLeft - left) + (N & cannotPreAlignLeft);
             assert(realignHint.left_align >= -N && realignHint.left_align <= N);
             assert(AH::is_aligned(left + realignHint.left_align));
@@ -260,7 +260,7 @@ private:
             // (it's pointing to where we will store the pivot!) So we calculate alignment based on
             // right - 1
             auto preAlignedRight = reinterpret_cast<T*>(((reinterpret_cast<size_t>(right) - 1) & ~ALIGN_MASK) + ALIGN);
-            auto cannotPreAlignRight = (_endPtr - preAlignedRight) >> 63;
+            auto cannotPreAlignRight = (_endPtr - preAlignedRight) >> (8 * sizeof(ptrdiff_t) - 1);
             realignHint.right_align = (preAlignedRight - right - (N & cannotPreAlignRight));
             assert(realignHint.right_align >= -N && realignHint.right_align <= N);
             assert(AH::is_aligned(right + realignHint.right_align));

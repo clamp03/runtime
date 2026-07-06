@@ -311,7 +311,7 @@ endif()
 if(TARGET_ARCH_NAME MATCHES "^(arm|armel)$")
   add_compile_options(-mthumb)
   if (NOT DEFINED CLR_ARM_FPU_TYPE)
-    set (CLR_ARM_FPU_TYPE vfpv3)
+    set (CLR_ARM_FPU_TYPE neon-vfpv3)
   endif (NOT DEFINED CLR_ARM_FPU_TYPE)
 
   add_compile_options (-mfpu=${CLR_ARM_FPU_TYPE})

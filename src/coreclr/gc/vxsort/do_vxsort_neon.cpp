@@ -6,6 +6,7 @@
 #include "vxsort.h"
 #include "machine_traits.neon.h"
 
+#if defined(TARGET_ARM64)
 void do_vxsort_neon (uint8_t** low, uint8_t** high, uint8_t* range_low, uint8_t* range_high)
 {
     const int shift = 3;
@@ -13,3 +14,12 @@ void do_vxsort_neon (uint8_t** low, uint8_t** high, uint8_t* range_low, uint8_t*
     auto sorter = vxsort::vxsort<uint64_t, vxsort::vector_machine::NEON, 8, shift>();
     sorter.sort ((uint64_t*)low, (uint64_t*)high, (uint64_t)range_low, (uint64_t)(range_high+sizeof(uint8_t*)));
 }
+#elif defined(TARGET_ARM)
+void do_vxsort_neon (uint8_t** low, uint8_t** high, uint8_t* range_low, uint8_t* range_high)
+{
+    const int shift = 2;
+    assert((1 << shift) == sizeof(size_t));
+    auto sorter = vxsort::vxsort<uint32_t, vxsort::vector_machine::NEON, 4, shift>();
+    sorter.sort ((uint32_t*)low, (uint32_t*)high, (uint32_t)range_low, (uint32_t)(range_high+sizeof(uint8_t*)));
+}
+#endif

@@ -50,7 +50,7 @@
 #endif // defined(FEATURE_SVR_GC)
 #endif // __INTELLISENSE__
 
-#if defined(TARGET_AMD64) || defined(TARGET_ARM64)
+#if defined(TARGET_AMD64) || defined(TARGET_ARM64) || defined(TARGET_ARM)
 #include "vxsort/do_vxsort.h"
 #define USE_VXSORT
 #else
@@ -5769,7 +5769,9 @@ static void do_vxsort (uint8_t** item_array, ptrdiff_t item_count, uint8_t* rang
     const ptrdiff_t AVX512F_THRESHOLD_SIZE = 128 * 1024;
 
     // above this threshold, using NEON for sorting will likely pay off
-    const ptrdiff_t NEON_THRESHOLD_SIZE = 1024;
+    // TEST-ONLY: lowered to 0 to force vxsort on every mark-list sort (>=2 elements)
+    // for ARM32 correctness validation. REVERT to 1024 before merge.
+    const ptrdiff_t NEON_THRESHOLD_SIZE = 0;
 
     if (item_count <= 1)
         return;

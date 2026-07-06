@@ -10,8 +10,13 @@ using namespace std;
 #include "do_vxsort.h"
 #include "../../../introsort.h"
 
+#if defined(TARGET_ARM)
+uint8_t* START = (uint8_t*)0x12345678;
+uint8_t  SHIFT = 2;
+#else
 uint8_t* START = (uint8_t*)0x1234567812345678;
 uint8_t  SHIFT = 3;
+#endif
 
 std::vector<uint8_t*> generate_random_garbage(const uint64_t size) {
 
@@ -37,7 +42,11 @@ long demo_vxsort(std::vector<uint8_t*>* v, size_t vector_size)
     auto end = begin + vector_size - 1;
 
     uint8_t* range_low =  START;
+#if defined(TARGET_ARM)
+    uint8_t* range_high = (uint8_t*)0xfffffff0;
+#else
     uint8_t* range_high = (uint8_t*)0xffffffffffffffff;
+#endif
 
     // Ensure not sorted
     bool sorted = true;
@@ -64,7 +73,7 @@ long demo_vxsort(std::vector<uint8_t*>* v, size_t vector_size)
         do_vxsort_avx512(begin, end, range_low, range_high);
     }
     else
-#elif defined(CPU_FEATURES_ARCH_AARCH64)
+#elif defined(CPU_FEATURES_ARCH_AARCH64) || defined(CPU_FEATURES_ARCH_ARM)
     if (IsSupportedInstructionSet (InstructionSet::NEON))
     {
         do_vxsort_neon(begin, end, range_low, range_high);
@@ -100,7 +109,11 @@ long demo_insertsort(std::vector<uint8_t*>* v, size_t vector_size)
     auto end = begin + vector_size - 1;
 
     uint8_t* range_low =  START;
+#if defined(TARGET_ARM)
+    uint8_t* range_high = (uint8_t*)0xfffffff0;
+#else
     uint8_t* range_high = (uint8_t*)0xffffffffffffffff;
+#endif
 
     // Ensure not sorted
     bool sorted = true;
@@ -140,7 +153,7 @@ int main(int argc, char** argv) {
 
 #if defined(TARGET_AMD64)
     InitSupportedInstructionSet(1 << (int)InstructionSet::AVX2);
-#elif defined(TARGET_ARM64)
+#elif defined(TARGET_ARM64) || defined(TARGET_ARM)
     InitSupportedInstructionSet(1 << (int)InstructionSet::NEON);
 #endif
 
