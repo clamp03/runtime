@@ -82,6 +82,9 @@ namespace R2RDump
         public Option<string[]> DumpRva { get; } =
             new("--dump-rva") { Description = "Dump raw bytes at RVA:Size (hex), e.g. --dump-rva 0x1234:0x20" };
 
+        public Option<bool> CallShape { get; } =
+            new("--callshape") { Description = "Histogram import-cell fixup kinds by call-shape category (measures hard-bind opportunity)." };
+
         public ParseResult Result;
 
         public R2RDumpRootCommand()
@@ -125,6 +128,7 @@ namespace R2RDump
             Options.Add(InlineSignatureBinary);
             Options.Add(ValidateDebugInfo);
             Options.Add(DumpRva);
+            Options.Add(CallShape);
 
             SetAction(parseResult =>
             {

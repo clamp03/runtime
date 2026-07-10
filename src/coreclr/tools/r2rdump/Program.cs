@@ -14,6 +14,7 @@ using System.Text;
 using ILCompiler.Diagnostics;
 using ILCompiler.Reflection.ReadyToRun;
 using Internal.Runtime;
+using Internal.ReadyToRunConstants;
 using Internal.TypeSystem;
 using OperatingSystem = ILCompiler.Reflection.ReadyToRun.OperatingSystem;
 
@@ -418,6 +419,56 @@ namespace R2RDump
             return null;
         }
 
+        // [Tizen] Histogram import-cell fixup kinds by call-shape category to size the
+        // hard-bind opportunity (item1 = non-virtual MethodEntry cells that could become direct calls).
+        private void DumpCallShape(ReadyToRunReader r2r)
+        {
+            var counts = new Dictionary<ReadyToRunFixupKind, int>();
+            int total = 0;
+            foreach (var importSection in r2r.ImportSections)
+            {
+                if (importSection.Entries == null)
+                    continue;
+                foreach (var entry in importSection.Entries)
+                {
+                    if (entry.Signature == null)
+                        continue;
+                    ReadyToRunFixupKind kind = entry.Signature.FixupKind;
+                    counts.TryGetValue(kind, out int c);
+                    counts[kind] = c + 1;
+                    total++;
+                }
+            }
+
+            static string Category(ReadyToRunFixupKind k) => k switch
+            {
+                ReadyToRunFixupKind.MethodEntry or ReadyToRunFixupKind.MethodEntry_DefToken or ReadyToRunFixupKind.MethodEntry_RefToken
+                    => "item1: direct-bindable (non-virtual MethodEntry)",
+                ReadyToRunFixupKind.VirtualEntry or ReadyToRunFixupKind.VirtualEntry_DefToken or ReadyToRunFixupKind.VirtualEntry_RefToken or ReadyToRunFixupKind.VirtualEntry_Slot
+                    => "item3: virtual / interface dispatch",
+                ReadyToRunFixupKind.CctorTrigger or ReadyToRunFixupKind.StaticBaseNonGC or ReadyToRunFixupKind.StaticBaseGC
+                    or ReadyToRunFixupKind.ThreadStaticBaseNonGC or ReadyToRunFixupKind.ThreadStaticBaseGC
+                    or ReadyToRunFixupKind.FieldAddress or ReadyToRunFixupKind.FieldBaseOffset or ReadyToRunFixupKind.FieldOffset
+                    => "item2: cctor / static base",
+                ReadyToRunFixupKind.ThisObjDictionaryLookup or ReadyToRunFixupKind.TypeDictionaryLookup or ReadyToRunFixupKind.MethodDictionaryLookup
+                    or ReadyToRunFixupKind.TypeDictionary or ReadyToRunFixupKind.MethodDictionary
+                    => "item5: generic dictionary",
+                _ => "other (handles/helpers/casts/pinvoke)"
+            };
+
+            _writer.WriteLine("=================== Call-shape histogram (import cells) ===================");
+            _writer.WriteLine($"Machine: {r2r.Machine}   total import cells: {total}");
+            _writer.WriteLine();
+            _writer.WriteLine("By fixup kind:");
+            foreach (var kv in counts.OrderByDescending(x => x.Value))
+                _writer.WriteLine($"  {kv.Key,-28} {kv.Value,8}  ({(total == 0 ? 0 : 100.0 * kv.Value / total),5:F1}%)");
+            _writer.WriteLine();
+            _writer.WriteLine("By call-shape category:");
+            foreach (var c in counts.GroupBy(kv => Category(kv.Key)).Select(g => new { Cat = g.Key, Count = g.Sum(x => x.Value) }).OrderByDescending(x => x.Count))
+                _writer.WriteLine($"  {c.Cat,-48} {c.Count,8}  ({(total == 0 ? 0 : 100.0 * c.Count / total),5:F1}%)");
+            _writer.WriteLine("==========================================================================");
+        }
+
         public int Run()
         {
             NativeLibrary.SetDllImportResolver(typeof(PdbWriter).Assembly,
@@ -489,6 +540,11 @@ namespace R2RDump
                     // parse the ReadyToRun image
                     ReadyToRunReader r2r = new(model, filename);
                     r2r.ValidateDebugInfo = Get(_command.ValidateDebugInfo);
+                    if (Get(_command.CallShape))
+                    {
+                        DumpCallShape(r2r);
+                        continue;
+                    }
                     if (disasm)
                     {
                         disassembler = new Disassembler(r2r, model);
