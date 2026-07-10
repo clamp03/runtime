@@ -492,6 +492,15 @@ namespace Internal.JitInterface
         private static readonly bool s_hardBind =
             Environment.GetEnvironmentVariable("CROSSGEN2_HARDBIND") == "1" || s_hardBindSafeSet != null;
 
+        // [Tizen PoC] Opt-in verification stats (default OFF). With CROSSGEN2_HARDBIND_STATS=1 the branch
+        // below counts direct-binds and how many were cross-module, and logs milestones to stderr — this
+        // is how we confirm composite mode actually produces cross-assembly binds (which the same-module
+        // gate blocks in single-file mode). Has no effect unless the env var is set.
+        private static readonly bool s_hardBindStats =
+            Environment.GetEnvironmentVariable("CROSSGEN2_HARDBIND_STATS") == "1";
+        private static int s_hbBind;         // total direct-binds
+        private static int s_hbCrossModule;  // subset where caller.Module != target.Module (only possible in composite)
+
         // [Tizen PoC] True iff 'method' will actually be compiled to non-empty code in THIS image,
         // so a direct relocation to its CompiledMethodNode is safe (won't dangle to an empty node
         // and crash the PE writer). Mirrors ReadyToRunLibraryRootProvider's rooting decision:
@@ -512,16 +521,25 @@ namespace Internal.JitInterface
             // correct — no getCallInfo-time prediction of the final emitted set (which is impossible).
             if (s_hardBindSafeSet != null)
             {
-                // Same-module (== same OUTPUT image) as the caller. In a version bubble (--inputbubble,
-                // which includes CoreLib), ContainsMethodBody is true across the whole bubble, but each
-                // assembly is emitted to its OWN image; a cross-module target's code is NOT in this image,
-                // so a direct reloc to it would dangle. (This is precisely why CoreLib — a single module —
-                // worked while the framework bubble crashed: framework methods were direct-bound to CoreLib.)
-                // Caller-dependent, so not cached.
-                var callerEcma = MethodBeingCompiled.GetTypicalMethodDefinition() as EcmaMethod;
-                var targetEcma = method.GetTypicalMethodDefinition() as EcmaMethod;
-                if (callerEcma == null || targetEcma == null || callerEcma.Module != targetEcma.Module)
-                    return false;
+                // The relevant scope is the same OUTPUT image, not the same EcmaModule.
+                //   * --single-file-compilation: each assembly is emitted to its OWN .ni image, so a
+                //     cross-module target's code is NOT in this image and a direct reloc would dangle.
+                //     Under --inputbubble ContainsMethodBody is true across the whole version bubble
+                //     (which includes CoreLib), so here we must additionally require the SAME module.
+                //   * --composite: ALL merged input assemblies are compiled into ONE image (see
+                //     ReadyToRunCompilationModuleGroupBase: _compilationModuleSet holds every input and
+                //     ReadyToRunCodegenCompilation.Compile emits them with a single EmitObject). So
+                //     ContainsMethodBody (checked by the caller) already means "in THIS image", and the
+                //     same-module restriction would wrongly block the cross-assembly direct binds that
+                //     composite exists to enable. Skip it in composite mode.
+                if (!_compilation.NodeFactory.CompilationModuleGroup.IsCompositeBuildMode)
+                {
+                    // Caller-dependent, so not cached.
+                    var callerEcma = MethodBeingCompiled.GetTypicalMethodDefinition() as EcmaMethod;
+                    var targetEcma = method.GetTypicalMethodDefinition() as EcmaMethod;
+                    if (callerEcma == null || targetEcma == null || callerEcma.Module != targetEcma.Module)
+                        return false;
+                }
 
                 // Emitted-with-real-code ground truth (node-free key == GetMangledMethodName), cached per target.
                 return s_hardBindSafeCache.GetOrAdd(method, m =>
@@ -2689,6 +2707,17 @@ namespace Internal.JitInterface
                             // relocation never dangles to an empty MethodWithGCInfo (would crash the PE writer).
                             MethodWithGCInfo targetCodeNode = _compilation.NodeFactory.CompiledMethodNode(nonUnboxingMethod);
                             pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(targetCodeNode);
+
+                            if (s_hardBindStats)
+                            {
+                                int total = System.Threading.Interlocked.Increment(ref s_hbBind);
+                                bool crossModule =
+                                    (MethodBeingCompiled.GetTypicalMethodDefinition() as EcmaMethod)?.Module
+                                    != (nonUnboxingMethod.GetTypicalMethodDefinition() as EcmaMethod)?.Module;
+                                int cross = crossModule ? System.Threading.Interlocked.Increment(ref s_hbCrossModule) : s_hbCrossModule;
+                                if (total == 1 || total % 5000 == 0)
+                                    Console.Error.WriteLine($"[HB] direct-bind total={total} cross-module={cross} (e.g. {_compilation.NameMangler.GetMangledMethodName(nonUnboxingMethod)})");
+                            }
                         }
                         else
                         {
