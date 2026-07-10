@@ -477,6 +477,74 @@ namespace Internal.JitInterface
     {
         private const CORINFO_RUNTIME_ABI TargetABI = CORINFO_RUNTIME_ABI.CORINFO_CORECLR_ABI;
 
+        // [Tizen PoC] Closed-world fragile hard-bind: emit direct calls (no import cell)
+        // to method bodies that live in this same image. Two modes:
+        //  * CROSSGEN2_HARDBIND_LIST=<path>: emit-time ground-truth mode (preferred). The list is
+        //    the mangled symbol names of methods a prior normal pass actually emitted with non-empty
+        //    code; we direct-bind only to those, so the relocation can never dangle.
+        //  * CROSSGEN2_HARDBIND=1: list-less best-effort mode (small PoC / prediction guards only).
+        private static readonly string s_hardBindListPath =
+            Environment.GetEnvironmentVariable("CROSSGEN2_HARDBIND_LIST");
+        private static readonly HashSet<string> s_hardBindSafeSet =
+            !string.IsNullOrEmpty(s_hardBindListPath) && System.IO.File.Exists(s_hardBindListPath)
+                ? new HashSet<string>(System.IO.File.ReadAllLines(s_hardBindListPath))
+                : null;
+        private static readonly bool s_hardBind =
+            Environment.GetEnvironmentVariable("CROSSGEN2_HARDBIND") == "1" || s_hardBindSafeSet != null;
+
+        // [Tizen PoC] True iff 'method' will actually be compiled to non-empty code in THIS image,
+        // so a direct relocation to its CompiledMethodNode is safe (won't dangle to an empty node
+        // and crash the PE writer). Mirrors ReadyToRunLibraryRootProvider's rooting decision:
+        // IsMethodCompilable (== CompileMethod's skip logic: skipped/no-IL/just-throws/bad-catch)
+        // plus CheckCanGenerateMethod (unresolvable signature types prevent codegen).
+        // Per-target memoization of the safe-list check. GetMangledName allocates+mangles, and a
+        // method is called from many sites across a large composite; without this cache the per-
+        // callsite mangling churns enough memory/CPU to trip a per-process limit on huge bubbles
+        // (e.g. the Tizen framework composite). Keyed by interned MethodDesc; crossgen compiles in
+        // parallel so this must be concurrent.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<MethodDesc, bool> s_hardBindSafeCache
+            = new System.Collections.Concurrent.ConcurrentDictionary<MethodDesc, bool>();
+
+        private bool HardBindTargetIsSafe(MethodDesc method)
+        {
+            // Preferred: emit-time ground truth. Only direct-bind to a target the prior normal pass
+            // actually emitted (non-empty code, this exact symbol). This is what makes the relaxation
+            // correct — no getCallInfo-time prediction of the final emitted set (which is impossible).
+            if (s_hardBindSafeSet != null)
+            {
+                // Same-module (== same OUTPUT image) as the caller. In a version bubble (--inputbubble,
+                // which includes CoreLib), ContainsMethodBody is true across the whole bubble, but each
+                // assembly is emitted to its OWN image; a cross-module target's code is NOT in this image,
+                // so a direct reloc to it would dangle. (This is precisely why CoreLib — a single module —
+                // worked while the framework bubble crashed: framework methods were direct-bound to CoreLib.)
+                // Caller-dependent, so not cached.
+                var callerEcma = MethodBeingCompiled.GetTypicalMethodDefinition() as EcmaMethod;
+                var targetEcma = method.GetTypicalMethodDefinition() as EcmaMethod;
+                if (callerEcma == null || targetEcma == null || callerEcma.Module != targetEcma.Module)
+                    return false;
+
+                // Emitted-with-real-code ground truth (node-free key == GetMangledMethodName), cached per target.
+                return s_hardBindSafeCache.GetOrAdd(method, m =>
+                    s_hardBindSafeSet.Contains(_compilation.NameMangler.GetMangledMethodName(m).ToString()));
+            }
+
+            // List-less fallback: best-effort prediction (used only for the small non-list PoC mode;
+            // known to be incomplete on the full framework — see report 부록 G).
+            if (method.HasInstantiation || method.OwningType.HasInstantiation)
+                return false;
+            if (!IsMethodCompilable(_compilation, method))
+                return false;
+            try
+            {
+                ReadyToRunLibraryRootProvider.CheckCanGenerateMethod(method);
+            }
+            catch (TypeSystemException)
+            {
+                return false;
+            }
+            return true;
+        }
+
         private readonly ReadyToRunCodegenCompilation _compilation;
         private MethodWithGCInfo _methodCodeNode;
         private MethodColdCodeNode _methodColdCodeNode;
@@ -2600,6 +2668,26 @@ namespace Internal.JitInterface
                             // backpatching cannot redirect this call to a different code version.
                             MethodDesc compilableTarget = nonUnboxingMethod.GetCanonMethodTarget(CanonicalFormKind.Specific);
                             MethodWithGCInfo targetCodeNode = _compilation.NodeFactory.CompiledMethodNode(compilableTarget);
+                            pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(targetCodeNode);
+                        }
+                        else if (s_hardBind
+                            && (flags & CORINFO_CALLINFO_FLAGS.CORINFO_CALLINFO_LDFTN) == 0   // not ldftn (needs precode)
+                            && !useInstantiatingStub                                          // not a generic instantiating stub
+                            && !isUnboxingStub
+                            && constrainedType == null
+                            && nonUnboxingMethod.GetCanonMethodTarget(CanonicalFormKind.Specific) == nonUnboxingMethod // not shared generic
+                            && !nonUnboxingMethod.OwningType.HasStaticConstructor              // no cctor trigger needed on entry
+                            && _compilation.NodeFactory.CompilationModuleGroup.ContainsMethodBody(nonUnboxingMethod, false)
+                            && HardBindTargetIsSafe(nonUnboxingMethod))                        // target actually gets real code in THIS image
+                        {
+                            // [Tizen PoC] READYTORUN: Direct call to the compiled body in this image.
+                            // Replaces the MethodEntrypoint import cell (indirect `call [cell]`) with a
+                            // direct branch (`bl <addr>`). Fragile: valid only while the whole image is
+                            // regenerated together (Tizen on-device NI regen). Mirrors the AsyncResumptionStub path above.
+                            // IsMethodCompilable guard: only bind directly to targets that are actually compiled
+                            // to non-empty code in this image (not abstract/internalcall/just-throws/skipped), so the
+                            // relocation never dangles to an empty MethodWithGCInfo (would crash the PE writer).
+                            MethodWithGCInfo targetCodeNode = _compilation.NodeFactory.CompiledMethodNode(nonUnboxingMethod);
                             pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(targetCodeNode);
                         }
                         else

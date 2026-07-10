@@ -428,6 +428,24 @@ namespace ILCompiler
                     _format,
                     _customPESectionAlignment,
                     _logger);
+
+                // [Tizen PoC] emit-time hard-bind safe-list: after emission the exact set of methods
+                // that got real (non-empty) code with a stable symbol is known. Record their mangled
+                // symbol names; a later hard-bind pass reads this list and only rewrites calls whose
+                // target is in it (ground truth => the direct relocation can never dangle). This is the
+                // emit-time-decision half of the "link relaxation" — it replaces the fragile getCallInfo
+                // prediction that could not know the final emitted set.
+                string hbEmitListPath = Environment.GetEnvironmentVariable("CROSSGEN2_EMIT_HARDBIND_LIST");
+                if (!string.IsNullOrEmpty(hbEmitListPath))
+                {
+                    using var hbw = new System.IO.StreamWriter(hbEmitListPath, append: true);
+                    foreach (var n in nodes)
+                    {
+                        if (n is MethodWithGCInfo mgi && !mgi.IsEmpty)
+                            hbw.WriteLine(mgi.GetMangledName(NameMangler));
+                    }
+                }
+
                 CompilationModuleGroup moduleGroup = _nodeFactory.CompilationModuleGroup;
 
                 if (moduleGroup.IsCompositeBuildMode)
