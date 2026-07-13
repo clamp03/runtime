@@ -218,8 +218,15 @@ namespace ILCompiler.DependencyAnalysis
         //*****************************************************************************
         private static unsafe void PutThumb2BlRel24(ushort* p, int imm24)
         {
-            // Verify that we got a valid offset
-            Debug.Assert(FitsInThumb2BlRel24(imm24));
+            // Verify that we got a valid offset. This must be a hard failure: silently
+            // masking an out-of-range offset emits a branch to a garbage address (Thumb2
+            // bl reaches only +-16MB and there is no veneer support in the PE writer, so
+            // large images with direct branches - e.g. --hard-bind composites - can
+            // legitimately overflow here).
+            if (!FitsInThumb2BlRel24(imm24))
+            {
+                throw new OverflowException($"Thumb2 bl/b.w relocation target out of +-16MB range (offset 0x{imm24:X}). The image is too large for direct branches on arm32.");
+            }
 
             // Ensure that the ThumbBit is not set on the offset
             // as it cannot be encoded.
@@ -415,8 +422,12 @@ namespace ILCompiler.DependencyAnalysis
 
         private static unsafe void PutArm64Rel28(uint* pCode, long imm28)
         {
-            // Verify that we got a valid offset
-            Debug.Assert(FitsInArm64Rel28(imm28));
+            // Verify that we got a valid offset. Hard failure: masking an out-of-range
+            // offset would emit a branch to a garbage address (arm64 b/bl reaches +-128MB).
+            if (!FitsInArm64Rel28(imm28))
+            {
+                throw new OverflowException($"ARM64 b/bl relocation target out of +-128MB range (offset 0x{imm28:X}).");
+            }
 
             Debug.Assert((imm28 & 0x3) == 0);    // the low two bits must be zero
 

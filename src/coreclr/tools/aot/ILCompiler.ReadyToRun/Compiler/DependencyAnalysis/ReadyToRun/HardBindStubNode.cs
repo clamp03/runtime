@@ -46,6 +46,26 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
         public Import Cell => _cell;
 
+        /// <summary>
+        /// Set by HardBindRelaxation when at least one direct-call relocation was
+        /// redirected to this stub. Unused stubs (the common case: their callee's direct
+        /// calls were all kept) are skipped at emission.
+        /// </summary>
+        public bool Used { get; private set; }
+
+        public void MarkUsed(NodeFactory factory)
+        {
+            if (!Used)
+            {
+                Used = true;
+                // Register with the method-call-thunk range only when actually emitted so
+                // the runtime classifies the stub's PCs as STUB_CODE_BLOCK_METHOD_CALL_THUNK.
+                factory.DelayLoadMethodCallThunks.OnNodeInRangeMarked(this);
+            }
+        }
+
+        public override bool ShouldSkipEmittingObjectNode(NodeFactory factory) => !Used;
+
         public override void AppendMangledName(NameMangler nameMangler, Utf8StringBuilder sb)
         {
             sb.Append("HardBindStub->"u8);
@@ -74,11 +94,6 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             DependencyList dependencies = new DependencyList();
             dependencies.Add(factory.DelayLoadMethodCallThunks, "MethodCallThunksList");
             return dependencies;
-        }
-
-        protected override void OnMarked(NodeFactory factory)
-        {
-            factory.DelayLoadMethodCallThunks.OnNodeInRangeMarked(this);
         }
 
         protected override void EmitCode(NodeFactory factory, ref X64.X64Emitter instructionEncoder, bool relocsOnly)

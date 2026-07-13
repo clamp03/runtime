@@ -2637,15 +2637,19 @@ namespace Internal.JitInterface
                                 Import anchor = _compilation.SymbolNodeFactory.MethodPrepareAnchor(calleeToken);
                                 AddPrecodeFixup(anchor);
 
-                                // The fallback stub jumps through the callee's regular import cell. The
+                                // The fallback stub jumps through the callee's import cell. On x64 the
                                 // cell must be the jumpable variant: the stub reaches it with a jump, so
-                                // on x64 the cell address is passed in rax rather than being decoded
-                                // from a return address (same protocol as R2R fast tailcalls).
+                                // the cell address is passed in rax rather than being decoded from a
+                                // return address (same protocol as R2R fast tailcalls). On arm/arm64 the
+                                // regular cell works (the delay-load thunks take the cell address in
+                                // r12/x11, which the stub materializes), so the cell shared with regular
+                                // callsites is reused, avoiding a duplicate cell + GC ref map entry.
+                                bool needsJumpableCell = _compilation.TypeSystemContext.Target.Architecture == TargetArchitecture.X64;
                                 Import cell = (Import)_compilation.NodeFactory.MethodEntrypoint(
                                     calleeToken,
                                     isInstantiatingStub: false,
                                     isPrecodeImportRequired: false,
-                                    isJumpableImportRequired: true);
+                                    isJumpableImportRequired: needsJumpableCell);
                                 HardBindStubNode stub = _compilation.NodeFactory.HardBindStub(cell);
                                 AddAdditionalDependency(stub, "hard-bind fallback stub");
 

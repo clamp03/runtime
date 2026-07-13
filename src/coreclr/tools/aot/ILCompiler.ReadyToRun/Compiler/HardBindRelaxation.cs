@@ -290,6 +290,7 @@ namespace ILCompiler
                         if (redirectedCallees.Add(edge.Callee))
                         {
                             redirectMap[edge.Callee] = edge.Stub;
+                            edge.Stub.MarkUsed(factory);
                         }
                         anchorsToRemove.Add(edge.Anchor);
                         redirectedEdges++;
