@@ -242,10 +242,68 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
             return boundsBlob.ToArray();
         }
 
+        private static int s_unsupportedVarLocTypeLogged;
+
+        private static bool IsSupportedVarLocType(VarLocType varLocType)
+        {
+            switch (varLocType)
+            {
+                case VarLocType.VLT_REG:
+                case VarLocType.VLT_REG_FP:
+                case VarLocType.VLT_REG_BYREF:
+                case VarLocType.VLT_STK:
+                case VarLocType.VLT_STK_BYREF:
+                case VarLocType.VLT_REG_REG:
+                case VarLocType.VLT_REG_STK:
+                case VarLocType.VLT_STK_REG:
+                case VarLocType.VLT_STK2:
+                case VarLocType.VLT_FPSTK:
+                case VarLocType.VLT_FIXED_VA:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         public static byte[] CreateVarBlobForMethod(NativeVarInfo[] varInfos, TargetDetails target)
         {
             if (varInfos == null || varInfos.Length == 0)
                 return null;
+
+            // WORKAROUND: the JIT can report variable locations this encoder has no
+            // encoding for (observed on arm32 with current main). Skip those variables'
+            // debug info instead of failing the whole compilation.
+            // TODO-UPSTREAM: identify the reported VarLocType and either encode it or fix
+            // the JIT-side reporting.
+            int supportedCount = 0;
+            foreach (var info in varInfos)
+            {
+                if (IsSupportedVarLocType(info.varLoc.LocationType))
+                {
+                    supportedCount++;
+                }
+                else if (System.Threading.Interlocked.Exchange(ref s_unsupportedVarLocTypeLogged, 1) == 0)
+                {
+                    System.Console.Error.WriteLine($"warning: skipping debug info for variable(s) with unsupported location type {info.varLoc.LocationType} ({(int)info.varLoc.LocationType}) on {target.Architecture}");
+                }
+            }
+
+            if (supportedCount == 0)
+                return null;
+
+            if (supportedCount != varInfos.Length)
+            {
+                NativeVarInfo[] filtered = new NativeVarInfo[supportedCount];
+                int j = 0;
+                foreach (var info in varInfos)
+                {
+                    if (IsSupportedVarLocType(info.varLoc.LocationType))
+                    {
+                        filtered[j++] = info;
+                    }
+                }
+                varInfos = filtered;
+            }
 
             bool isX86 = target.Architecture == TargetArchitecture.X86;
 
