@@ -1478,6 +1478,16 @@ namespace ILCompiler.Reflection.ReadyToRun
                     }
                     break;
 
+                case ReadyToRunFixupKind.StaticBaseAddressNonGC:
+                    ParseType(builder);
+                    builder.Append(" (STATIC_BASE_ADDRESS_NONGC)");
+                    break;
+
+                case ReadyToRunFixupKind.StaticBaseAddressGC:
+                    ParseType(builder);
+                    builder.Append(" (STATIC_BASE_ADDRESS_GC)");
+                    break;
+
                 case ReadyToRunFixupKind.Check_IL_Body:
                 case ReadyToRunFixupKind.Verify_IL_Body:
                     uint ilBodyByteBlobSize = ReadUInt();

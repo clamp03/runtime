@@ -325,6 +325,9 @@ enum ReadyToRunFixupKind
 
     READYTORUN_FIXUP_Check_VirtualSlot          = 0x3B, /* Check that a method got the vtable slot (and MethodTable layout offsets) that a hard-bound caller baked into its vtable dispatch call sites. On mismatch the caller's code is not used */
 
+    READYTORUN_FIXUP_StaticBaseAddressNonGC     = 0x3C, /* Import cell holding the address of a type's non-GC statics base; hard-bound callers load it directly (plus baked field offset) instead of calling the lazy StaticBaseNonGC helper. Only emitted for types without a static constructor */
+    READYTORUN_FIXUP_StaticBaseAddressGC        = 0x3D, /* Import cell holding the address of a type's GC statics base (pinned object heap); same contract as StaticBaseAddressNonGC */
+
     READYTORUN_FIXUP_ModuleOverride             = 0x80, /* followed by sig-encoded UInt with assemblyref index into either the assemblyref table of the MSIL metadata of the master context module for the signature or */
                                                         /* into the extra assemblyref table in the manifest metadata R2R header table (used in cases inlining brings in references to assemblies not seen in the MSIL). */
 };

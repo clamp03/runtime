@@ -1865,6 +1865,43 @@ namespace Internal.JitInterface
                         }
                     }
 
+                    // Hard bind: for in-bubble, non-generic types without a static constructor, replace the
+                    // lazy static-base helper call with a data load through an import cell that the runtime
+                    // resolves to the type's statics base address (StaticBaseAddressNonGC/GC fixup) while
+                    // processing this caller's fixup list. Resolving the cell allocates the statics, which
+                    // for cctor-less types also marks the type initialized (IsInitedIfStaticDataAllocated),
+                    // so no class-init check is needed at the access site and no INITCLASS flag is set here.
+                    // The baked base address is stable: non-GC statics live in the LoaderAllocator's native
+                    // statics heap, GC statics in a pinned-object-heap object[]; the runtime handler rejects
+                    // collectible types (caller falls back to the JIT). Boxed valuetype statics
+                    // (STATIC_IN_HEAP) keep the helper path: the JIT's RELOCATABLE expansion does not
+                    // support the extra box indirection.
+                    if (_compilation.HardBindEnabled
+                        && (helperId == ReadyToRunHelperId.GetNonGCStaticBase || helperId == ReadyToRunHelperId.GetGCStaticBase)
+                        && !field.IsThreadStatic
+                        && !field.HasRva
+                        && (fieldFlags & CORINFO_FIELD_FLAGS.CORINFO_FLG_FIELD_STATIC_IN_HEAP) == 0
+                        && !field.OwningType.HasStaticConstructor
+                        && !field.OwningType.HasInstantiation
+                        && !field.OwningType.IsCanonicalSubtype(CanonicalFormKind.Any)
+                        && _compilation.NodeFactory.CompilationModuleGroup.VersionsWithType(field.OwningType))
+                    {
+                        fieldAccessor = CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_STATIC_RELOCATABLE;
+                        pResult->helper = CorInfoHelpFunc.CORINFO_HELP_UNDEF;
+                        // CreateConstLookupToSymbol yields IAT_PVALUE: the JIT loads the base address from
+                        // the cell (invariant, non-null, hoistable) and adds the baked field offset
+                        // (pResult->offset stays field.Offset).
+                        pResult->fieldLookup = CreateConstLookupToSymbol(
+                            _compilation.SymbolNodeFactory.StaticBaseAddressCell(field.OwningType, gcStatics: helperId == ReadyToRunHelperId.GetGCStaticBase));
+                        helperId = ReadyToRunHelperId.Invalid;
+
+                        if (_compilation.SymbolNodeFactory.VerifyTypeAndFieldLayout && (fieldOffset <= FieldFixupSignature.MaxCheckableOffset))
+                        {
+                            // ENCODE_CHECK_FIELD_OFFSET
+                            AddPrecodeFixup(_compilation.SymbolNodeFactory.CheckFieldOffset(ComputeFieldWithToken(field, ref pResolvedToken)));
+                        }
+                    }
+
                     if (!_compilation.NodeFactory.CompilationModuleGroup.VersionsWithType(field.OwningType) &&
                         fieldAccessor == CORINFO_FIELD_ACCESSOR.CORINFO_FIELD_STATIC_SHARED_STATIC_HELPER)
                     {

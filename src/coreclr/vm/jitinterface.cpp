@@ -14843,6 +14843,67 @@ BOOL LoadDynamicInfoEntry(Module *currentModule,
         }
         break;
 
+    case READYTORUN_FIXUP_StaticBaseAddressNonGC:
+    case READYTORUN_FIXUP_StaticBaseAddressGC:
+        {
+            // Emitted by crossgen2 --hard-bind for static field accesses on in-bubble, non-generic
+            // types without a static constructor: the caller's code loads the type's statics base
+            // address directly from this import cell (and adds a baked field offset) instead of
+            // calling the lazy StaticBaseNonGC/GC helper. Resolving the cell allocates the statics
+            // up front; for cctor-less types the allocation alone marks the type initialized
+            // (see MethodTable::IsInitedIfStaticDataAllocated), so the access sites need no
+            // class-init check.
+            //
+            // The baked address is stable for the lifetime of the type: non-GC statics live in the
+            // LoaderAllocator's native statics heap, GC statics in a pinned-object-heap object[]
+            // that is guaranteed not to move.
+            TypeHandle th = ZapSig::DecodeType(currentModule, pInfoModule, pBlob);
+
+            if (th.IsTypeDesc())
+            {
+                return FALSE;
+            }
+
+            MethodTable *pMT = th.AsMethodTable();
+
+            // Belt and braces: crossgen2 only emits this fixup for non-generic types without a
+            // static constructor, and collectible statics do not have a stable address. If the
+            // runtime view disagrees (e.g. version drift added a .cctor), reject this caller's
+            // precompiled code (JIT fallback) instead of baking a wrong or unstable address.
+            if (pMT->Collectible() ||
+                pMT->HasInstantiation() ||
+                pMT->IsSharedByGenericInstantiations() ||
+                pMT->HasClassConstructor() ||
+                !pMT->IsDynamicStatics())
+            {
+                return FALSE;
+            }
+
+            // The caller's code accesses the statics without going through a helper; make sure the
+            // type's module is active and the statics storage exists before that code is published.
+            pMT->EnsureInstanceActive();
+            pMT->EnsureStaticDataAllocated();
+
+            {
+                GCX_COOP();
+                // Use the masked accessors: the DynamicStaticsInfo m_p*Statics words carry the
+                // ISCLASSNOTINITED bit in the low bit; never read them raw.
+                if (kind == READYTORUN_FIXUP_StaticBaseAddressGC)
+                {
+                    result = (size_t)pMT->GetGCStaticsBasePointer();
+                }
+                else
+                {
+                    result = (size_t)pMT->GetNonGCStaticsBasePointer();
+                }
+            }
+
+            if (result == 0)
+            {
+                return FALSE;
+            }
+        }
+        break;
 
     case READYTORUN_FIXUP_Check_InstructionSetSupport:
         {

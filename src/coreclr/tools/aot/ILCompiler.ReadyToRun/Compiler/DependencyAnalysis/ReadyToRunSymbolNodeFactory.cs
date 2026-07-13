@@ -107,6 +107,22 @@ namespace ILCompiler.DependencyAnalysis
                 );
             });
 
+            _staticBaseAddressNonGCCache = new NodeCache<TypeDesc, Import>(key =>
+            {
+                return new PrecodeHelperImport(
+                    _codegenNodeFactory,
+                    _codegenNodeFactory.TypeSignature(ReadyToRunFixupKind.StaticBaseAddressNonGC, key)
+                );
+            });
+
+            _staticBaseAddressGCCache = new NodeCache<TypeDesc, Import>(key =>
+            {
+                return new PrecodeHelperImport(
+                    _codegenNodeFactory,
+                    _codegenNodeFactory.TypeSignature(ReadyToRunFixupKind.StaticBaseAddressGC, key)
+                );
+            });
+
             _rvaFieldAddressCache = new NodeCache<FieldWithToken, Import>(key =>
             {
                 return new PrecodeHelperImport(
@@ -482,6 +498,16 @@ namespace ILCompiler.DependencyAnalysis
         public Import RvaFieldAddress(FieldWithToken fieldWithToken)
         {
             return _rvaFieldAddressCache.GetOrAdd(fieldWithToken);
+        }
+
+        private NodeCache<TypeDesc, Import> _staticBaseAddressNonGCCache;
+        private NodeCache<TypeDesc, Import> _staticBaseAddressGCCache;
+
+        public Import StaticBaseAddressCell(TypeDesc typeDesc, bool gcStatics)
+        {
+            return gcStatics
+                ? _staticBaseAddressGCCache.GetOrAdd(typeDesc)
+                : _staticBaseAddressNonGCCache.GetOrAdd(typeDesc);
         }
 
         private NodeCache<MethodAndCallSite, Import> _interfaceDispatchCells = new NodeCache<MethodAndCallSite, Import>();
