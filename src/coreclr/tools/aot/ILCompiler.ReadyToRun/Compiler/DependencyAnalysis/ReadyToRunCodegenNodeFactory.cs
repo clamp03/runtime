@@ -338,6 +338,11 @@ namespace ILCompiler.DependencyAnalysis
                 return new ImportThunk(this, key.Helper, key.ContainingImportSection, key.UseVirtualCall, key.UseJumpableStub);
             });
 
+            _hardBindStubs = new NodeCache<Import, HardBindStubNode>(cell =>
+            {
+                return new HardBindStubNode(cell);
+            });
+
             _wasmImportThunks = new NodeCache<WasmImportThunkKey, ISymbolDefinitionNode>(key =>
             {
                 return new WasmImportThunk(this, key.Signature, key.Helper, key.ContainingImportSection, key.UseVirtualCall, key.UseJumpableStub);
@@ -797,6 +802,13 @@ namespace ILCompiler.DependencyAnalysis
             {
                 return HashCode.Combine(Helper, ContainingImportSection, UseVirtualCall, UseJumpableStub);
             }
+        }
+
+        private NodeCache<Import, HardBindStubNode> _hardBindStubs;
+
+        public HardBindStubNode HardBindStub(Import cell)
+        {
+            return _hardBindStubs.GetOrAdd(cell);
         }
 
         private NodeCache<ImportThunkKey, ISymbolDefinitionNode> _importThunks;

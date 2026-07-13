@@ -95,6 +95,28 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
 
         public List<ISymbolNode> Fixups => _fixups;
 
+        /// <summary>
+        /// Direct-call (hard-bind) edges emitted from this method's code: for each edge the
+        /// code contains a direct-call relocation to <see cref="HardBindEdge.Callee"/>, the
+        /// fixup list contains <see cref="HardBindEdge.Anchor"/> (a MethodPrepare cell), and
+        /// <see cref="HardBindEdge.Stub"/> is the fallback stub the relocation is redirected
+        /// to when the callee cannot be safely hard-bound (see HardBindRelaxation).
+        /// </summary>
+        public List<HardBindEdge> HardBindEdges { get; private set; }
+
+        public void SetHardBindEdges(List<HardBindEdge> edges)
+        {
+            Debug.Assert(HardBindEdges == null);
+            HardBindEdges = edges;
+        }
+
+        /// <summary>
+        /// True once this method was marked in a compilation phase later than phase 0.
+        /// Hard-bind relaxation refuses to keep direct calls to (or from) such methods
+        /// because methods first marked past phase 1 are force-emptied.
+        /// </summary>
+        public bool LateTriggeredCompilation => _lateTriggeredCompilation;
+
         public int Size => _methodCode.Data.Length;
 
         public bool IsEmpty => _methodCode.Data.Length == 0;

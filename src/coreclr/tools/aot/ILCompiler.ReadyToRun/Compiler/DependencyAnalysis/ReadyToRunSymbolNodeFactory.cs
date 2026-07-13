@@ -74,6 +74,13 @@ namespace ILCompiler.DependencyAnalysis
                     new ResumptionStubEntryPointSignature(key));
             });
 
+            _methodPrepareAnchors = new NodeCache<MethodWithToken, Import>(key =>
+            {
+                return new PrecodeHelperImport(
+                    _codegenNodeFactory,
+                    _codegenNodeFactory.MethodSignature(ReadyToRunFixupKind.MethodPrepare, key, isInstantiatingStub: false));
+            });
+
             _fieldAddressCache = new NodeCache<FieldWithToken, Import>(key =>
             {
                 return new DelayLoadHelperImport(
@@ -738,6 +745,18 @@ namespace ILCompiler.DependencyAnalysis
         internal Import ResumptionStubEntryPoint(MethodWithGCInfo resumptionStub)
         {
             return _resumptionStubEntryPointFixups.GetOrAdd(resumptionStub);
+        }
+
+        private NodeCache<MethodWithToken, Import> _methodPrepareAnchors;
+
+        /// <summary>
+        /// Per-callee anchor cell placed in a hard-bound caller's per-method fixup list.
+        /// Resolution prepares the callee's precompiled body (activation, its own fixup
+        /// list, entry-point registration) before the caller's entry point is published.
+        /// </summary>
+        public Import MethodPrepareAnchor(MethodWithToken method)
+        {
+            return _methodPrepareAnchors.GetOrAdd(method);
         }
     }
 }

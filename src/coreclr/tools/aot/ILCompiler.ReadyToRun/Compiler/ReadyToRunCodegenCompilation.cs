@@ -305,6 +305,12 @@ namespace ILCompiler
         public bool DeterminismCheckFailed { get; set; }
 
         public ReadyToRunSymbolNodeFactory SymbolNodeFactory { get; }
+
+        /// <summary>
+        /// True when --hard-bind is in effect: eligible calls to methods compiled into this
+        /// image are emitted as direct calls (resolved by HardBindRelaxation at emission).
+        /// </summary>
+        public bool HardBindEnabled { get; }
         public ReadyToRunCompilationModuleGroupBase CompilationModuleGroup { get; }
         private readonly int _customPESectionAlignment;
         private readonly ReadyToRunContainerFormat _format;
@@ -344,7 +350,8 @@ namespace ILCompiler
             FileLayoutAlgorithm fileLayoutAlgorithm,
             int customPESectionAlignment,
             bool verifyTypeAndFieldLayout,
-            ReadyToRunContainerFormat format)
+            ReadyToRunContainerFormat format,
+            bool hardBind)
             : base(
                   dependencyGraph,
                   nodeFactory,
@@ -369,6 +376,7 @@ namespace ILCompiler
             _generateProfileFile = generateProfileFile;
             _customPESectionAlignment = customPESectionAlignment;
             _format = format;
+            HardBindEnabled = hardBind;
             SymbolNodeFactory = new ReadyToRunSymbolNodeFactory(nodeFactory, verifyTypeAndFieldLayout);
             if (nodeFactory.InstrumentationDataTable != null)
                 nodeFactory.InstrumentationDataTable.Initialize(SymbolNodeFactory);
@@ -405,6 +413,14 @@ namespace ILCompiler
 
             var nodes = _dependencyGraph.MarkedNodeList;
 
+            if (HardBindEnabled)
+            {
+                // Resolve optimistic direct-call edges now that the final compiled set is
+                // known: keep direct calls to real bodies, redirect the rest to fallback
+                // stubs that route through the regular import cells.
+                HardBindRelaxation.Apply(nodes, NodeFactory, _logger);
+            }
+
             nodes = _fileLayoutOptimizer.ApplyProfilerGuidedMethodSort(nodes);
 
             using (PerfEventSource.StartStopEvents.EmittingEvents())
@@ -428,23 +444,6 @@ namespace ILCompiler
                     _format,
                     _customPESectionAlignment,
                     _logger);
-
-                // [Tizen PoC] emit-time hard-bind safe-list: after emission the exact set of methods
-                // that got real (non-empty) code with a stable symbol is known. Record their mangled
-                // symbol names; a later hard-bind pass reads this list and only rewrites calls whose
-                // target is in it (ground truth => the direct relocation can never dangle). This is the
-                // emit-time-decision half of the "link relaxation" — it replaces the fragile getCallInfo
-                // prediction that could not know the final emitted set.
-                string hbEmitListPath = Environment.GetEnvironmentVariable("CROSSGEN2_EMIT_HARDBIND_LIST");
-                if (!string.IsNullOrEmpty(hbEmitListPath))
-                {
-                    using var hbw = new System.IO.StreamWriter(hbEmitListPath, append: true);
-                    foreach (var n in nodes)
-                    {
-                        if (n is MethodWithGCInfo mgi && !mgi.IsEmpty)
-                            hbw.WriteLine(mgi.GetMangledName(NameMangler));
-                    }
-                }
 
                 CompilationModuleGroup moduleGroup = _nodeFactory.CompilationModuleGroup;
 

@@ -195,6 +195,8 @@ namespace Internal.ReadyToRunConstants
 
         InjectStringThunks = 0x39, /* Inject pregenerated string-to-code thunk mappings into the global lookup table */
 
+        MethodPrepare = 0x3A, /* Prepare the precompiled body of a hard-bound callee: activate its module, run its fixup list and register its entry point before the caller's code is published */
+
         ModuleOverride = 0x80,
         // followed by sig-encoded UInt with assemblyref index into either the assemblyref
         // table of the MSIL metadata of the master context module for the signature or

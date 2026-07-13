@@ -120,6 +120,9 @@
   <data name="BubbleGenericsOption" xml:space="preserve">
     <value>Compile instantiations from reference modules used in the current module</value>
   </data>
+  <data name="HardBindOption" xml:space="preserve">
+    <value>Emit direct calls between methods compiled into the same image (fragile: the produced image set must always be regenerated together)</value>
+  </data>
   <data name="EmbedPgoDataOption" xml:space="preserve">
     <value>Embed instrumentation data in generated file</value>
   </data>

@@ -477,92 +477,6 @@ namespace Internal.JitInterface
     {
         private const CORINFO_RUNTIME_ABI TargetABI = CORINFO_RUNTIME_ABI.CORINFO_CORECLR_ABI;
 
-        // [Tizen PoC] Closed-world fragile hard-bind: emit direct calls (no import cell)
-        // to method bodies that live in this same image. Two modes:
-        //  * CROSSGEN2_HARDBIND_LIST=<path>: emit-time ground-truth mode (preferred). The list is
-        //    the mangled symbol names of methods a prior normal pass actually emitted with non-empty
-        //    code; we direct-bind only to those, so the relocation can never dangle.
-        //  * CROSSGEN2_HARDBIND=1: list-less best-effort mode (small PoC / prediction guards only).
-        private static readonly string s_hardBindListPath =
-            Environment.GetEnvironmentVariable("CROSSGEN2_HARDBIND_LIST");
-        private static readonly HashSet<string> s_hardBindSafeSet =
-            !string.IsNullOrEmpty(s_hardBindListPath) && System.IO.File.Exists(s_hardBindListPath)
-                ? new HashSet<string>(System.IO.File.ReadAllLines(s_hardBindListPath))
-                : null;
-        private static readonly bool s_hardBind =
-            Environment.GetEnvironmentVariable("CROSSGEN2_HARDBIND") == "1" || s_hardBindSafeSet != null;
-
-        // [Tizen PoC] Opt-in verification stats (default OFF). With CROSSGEN2_HARDBIND_STATS=1 the branch
-        // below counts direct-binds and how many were cross-module, and logs milestones to stderr — this
-        // is how we confirm composite mode actually produces cross-assembly binds (which the same-module
-        // gate blocks in single-file mode). Has no effect unless the env var is set.
-        private static readonly bool s_hardBindStats =
-            Environment.GetEnvironmentVariable("CROSSGEN2_HARDBIND_STATS") == "1";
-        private static int s_hbBind;         // total direct-binds
-        private static int s_hbCrossModule;  // subset where caller.Module != target.Module (only possible in composite)
-
-        // [Tizen PoC] True iff 'method' will actually be compiled to non-empty code in THIS image,
-        // so a direct relocation to its CompiledMethodNode is safe (won't dangle to an empty node
-        // and crash the PE writer). Mirrors ReadyToRunLibraryRootProvider's rooting decision:
-        // IsMethodCompilable (== CompileMethod's skip logic: skipped/no-IL/just-throws/bad-catch)
-        // plus CheckCanGenerateMethod (unresolvable signature types prevent codegen).
-        // Per-target memoization of the safe-list check. GetMangledName allocates+mangles, and a
-        // method is called from many sites across a large composite; without this cache the per-
-        // callsite mangling churns enough memory/CPU to trip a per-process limit on huge bubbles
-        // (e.g. the Tizen framework composite). Keyed by interned MethodDesc; crossgen compiles in
-        // parallel so this must be concurrent.
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<MethodDesc, bool> s_hardBindSafeCache
-            = new System.Collections.Concurrent.ConcurrentDictionary<MethodDesc, bool>();
-
-        private bool HardBindTargetIsSafe(MethodDesc method)
-        {
-            // Preferred: emit-time ground truth. Only direct-bind to a target the prior normal pass
-            // actually emitted (non-empty code, this exact symbol). This is what makes the relaxation
-            // correct — no getCallInfo-time prediction of the final emitted set (which is impossible).
-            if (s_hardBindSafeSet != null)
-            {
-                // The relevant scope is the same OUTPUT image, not the same EcmaModule.
-                //   * --single-file-compilation: each assembly is emitted to its OWN .ni image, so a
-                //     cross-module target's code is NOT in this image and a direct reloc would dangle.
-                //     Under --inputbubble ContainsMethodBody is true across the whole version bubble
-                //     (which includes CoreLib), so here we must additionally require the SAME module.
-                //   * --composite: ALL merged input assemblies are compiled into ONE image (see
-                //     ReadyToRunCompilationModuleGroupBase: _compilationModuleSet holds every input and
-                //     ReadyToRunCodegenCompilation.Compile emits them with a single EmitObject). So
-                //     ContainsMethodBody (checked by the caller) already means "in THIS image", and the
-                //     same-module restriction would wrongly block the cross-assembly direct binds that
-                //     composite exists to enable. Skip it in composite mode.
-                if (!_compilation.NodeFactory.CompilationModuleGroup.IsCompositeBuildMode)
-                {
-                    // Caller-dependent, so not cached.
-                    var callerEcma = MethodBeingCompiled.GetTypicalMethodDefinition() as EcmaMethod;
-                    var targetEcma = method.GetTypicalMethodDefinition() as EcmaMethod;
-                    if (callerEcma == null || targetEcma == null || callerEcma.Module != targetEcma.Module)
-                        return false;
-                }
-
-                // Emitted-with-real-code ground truth (node-free key == GetMangledMethodName), cached per target.
-                return s_hardBindSafeCache.GetOrAdd(method, m =>
-                    s_hardBindSafeSet.Contains(_compilation.NameMangler.GetMangledMethodName(m).ToString()));
-            }
-
-            // List-less fallback: best-effort prediction (used only for the small non-list PoC mode;
-            // known to be incomplete on the full framework — see report 부록 G).
-            if (method.HasInstantiation || method.OwningType.HasInstantiation)
-                return false;
-            if (!IsMethodCompilable(_compilation, method))
-                return false;
-            try
-            {
-                ReadyToRunLibraryRootProvider.CheckCanGenerateMethod(method);
-            }
-            catch (TypeSystemException)
-            {
-                return false;
-            }
-            return true;
-        }
-
         private readonly ReadyToRunCodegenCompilation _compilation;
         private MethodWithGCInfo _methodCodeNode;
         private MethodColdCodeNode _methodColdCodeNode;
@@ -571,6 +485,7 @@ namespace Internal.JitInterface
         private HashSet<MethodDesc> _inlinedMethods;
         private UnboxingMethodDescFactory _unboxingThunkFactory = new UnboxingMethodDescFactory();
         private List<ISymbolNode> _precodeFixups;
+        private List<HardBindEdge> _hardBindEdges;
         private List<MethodDesc> _ilBodiesNeeded;
         private Dictionary<TypeDesc, bool> _preInitedTypes = new Dictionary<TypeDesc, bool>();
         private HashSet<MethodDesc> _synthesizedPgoDependencies;
@@ -2688,35 +2603,54 @@ namespace Internal.JitInterface
                             MethodWithGCInfo targetCodeNode = _compilation.NodeFactory.CompiledMethodNode(compilableTarget);
                             pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(targetCodeNode);
                         }
-                        else if (s_hardBind
-                            && (flags & CORINFO_CALLINFO_FLAGS.CORINFO_CALLINFO_LDFTN) == 0   // not ldftn (needs precode)
+                        else if (_compilation.HardBindEnabled
+                            && (flags & CORINFO_CALLINFO_FLAGS.CORINFO_CALLINFO_LDFTN) == 0   // not ldftn (needs a stable function pointer identity)
                             && !useInstantiatingStub                                          // not a generic instantiating stub
                             && !isUnboxingStub
                             && constrainedType == null
                             && nonUnboxingMethod.GetCanonMethodTarget(CanonicalFormKind.Specific) == nonUnboxingMethod // not shared generic
-                            && !nonUnboxingMethod.OwningType.HasStaticConstructor              // no cctor trigger needed on entry
-                            && _compilation.NodeFactory.CompilationModuleGroup.ContainsMethodBody(nonUnboxingMethod, false)
-                            && HardBindTargetIsSafe(nonUnboxingMethod))                        // target actually gets real code in THIS image
+                            && _compilation.NodeFactory.CompilationModuleGroup.ContainsMethodBody(nonUnboxingMethod, false))
                         {
-                            // [Tizen PoC] READYTORUN: Direct call to the compiled body in this image.
-                            // Replaces the MethodEntrypoint import cell (indirect `call [cell]`) with a
-                            // direct branch (`bl <addr>`). Fragile: valid only while the whole image is
-                            // regenerated together (Tizen on-device NI regen). Mirrors the AsyncResumptionStub path above.
-                            // IsMethodCompilable guard: only bind directly to targets that are actually compiled
-                            // to non-empty code in this image (not abstract/internalcall/just-throws/skipped), so the
-                            // relocation never dangles to an empty MethodWithGCInfo (would crash the PE writer).
+                            // Hard bind: optimistic direct call to the compiled body in this image,
+                            // replacing the MethodEntrypoint import cell (indirect `call [cell]`) with
+                            // a direct branch. Fragile: valid only while the whole image set is
+                            // regenerated together. Whether the direct call is kept is decided by the
+                            // hard-bind relaxation pass at emission time, when the final compiled set
+                            // is known; unsafe edges are redirected to a per-callee fallback stub that
+                            // routes through the regular import cell.
+                            //
+                            // For kept edges, a MethodPrepare anchor in this (caller) method's fixup
+                            // list makes the runtime prepare the callee before the caller's entry
+                            // point is published: activation, the callee's own fixup list (which
+                            // recursively prepares its direct callees), and registration of the
+                            // callee's entry point for GC/EH code identity.
+                            //
+                            // No class-constructor guard is needed: precise-init cctor triggers are
+                            // emitted by the JIT into the callee's own prologue (initClass), never
+                            // implied by the call boundary.
                             MethodWithGCInfo targetCodeNode = _compilation.NodeFactory.CompiledMethodNode(nonUnboxingMethod);
                             pResult->codePointerOrStubLookup.constLookup = CreateConstLookupToSymbol(targetCodeNode);
 
-                            if (s_hardBindStats)
+                            if (nonUnboxingMethod != MethodBeingCompiled)
                             {
-                                int total = System.Threading.Interlocked.Increment(ref s_hbBind);
-                                bool crossModule =
-                                    (MethodBeingCompiled.GetTypicalMethodDefinition() as EcmaMethod)?.Module
-                                    != (nonUnboxingMethod.GetTypicalMethodDefinition() as EcmaMethod)?.Module;
-                                int cross = crossModule ? System.Threading.Interlocked.Increment(ref s_hbCrossModule) : s_hbCrossModule;
-                                if (total == 1 || total % 5000 == 0)
-                                    Console.Error.WriteLine($"[HB] direct-bind total={total} cross-module={cross} (e.g. {_compilation.NameMangler.GetMangledMethodName(nonUnboxingMethod)})");
+                                MethodWithToken calleeToken = ComputeMethodWithToken(nonUnboxingMethod, ref pResolvedToken, constrainedType: null, unboxing: false);
+                                Import anchor = _compilation.SymbolNodeFactory.MethodPrepareAnchor(calleeToken);
+                                AddPrecodeFixup(anchor);
+
+                                // The fallback stub jumps through the callee's regular import cell. The
+                                // cell must be the jumpable variant: the stub reaches it with a jump, so
+                                // on x64 the cell address is passed in rax rather than being decoded
+                                // from a return address (same protocol as R2R fast tailcalls).
+                                Import cell = (Import)_compilation.NodeFactory.MethodEntrypoint(
+                                    calleeToken,
+                                    isInstantiatingStub: false,
+                                    isPrecodeImportRequired: false,
+                                    isJumpableImportRequired: true);
+                                HardBindStubNode stub = _compilation.NodeFactory.HardBindStub(cell);
+                                AddAdditionalDependency(stub, "hard-bind fallback stub");
+
+                                _hardBindEdges ??= new List<HardBindEdge>();
+                                _hardBindEdges.Add(new HardBindEdge { Callee = targetCodeNode, Anchor = anchor, Stub = stub });
                             }
                         }
                         else
@@ -3457,6 +3391,7 @@ namespace Internal.JitInterface
 
         private readonly Stack<List<ISymbolNode>> _stashedPrecodeFixups = new Stack<List<ISymbolNode>>();
         private readonly Stack<HashSet<MethodDesc>> _stashedInlinedMethods = new Stack<HashSet<MethodDesc>>();
+        private readonly Stack<List<HardBindEdge>> _stashedHardBindEdges = new Stack<List<HardBindEdge>>();
 
         private void beginInlining(CORINFO_METHOD_STRUCT_* inlinerHnd, CORINFO_METHOD_STRUCT_* inlineeHnd)
         {
@@ -3464,6 +3399,8 @@ namespace Internal.JitInterface
             _precodeFixups = null;
             _stashedInlinedMethods.Push(_inlinedMethods);
             _inlinedMethods = null;
+            _stashedHardBindEdges.Push(_hardBindEdges);
+            _hardBindEdges = null;
         }
 
         private void reportInliningDecision(CORINFO_METHOD_STRUCT_* inlinerHnd, CORINFO_METHOD_STRUCT_* inlineeHnd, CorInfoInline inlineResult, byte* reason)
@@ -3483,6 +3420,15 @@ namespace Internal.JitInterface
                     previouslyStashedFixups.AddRange(_precodeFixups);
                 }
                 _precodeFixups = previouslyStashedFixups;
+
+                // Same for hard-bind edges recorded while compiling the inlinee's calls.
+                List<HardBindEdge> previouslyStashedHardBindEdges = _stashedHardBindEdges.Pop();
+                if (_hardBindEdges != null)
+                {
+                    previouslyStashedHardBindEdges = previouslyStashedHardBindEdges ?? new List<HardBindEdge>();
+                    previouslyStashedHardBindEdges.AddRange(_hardBindEdges);
+                }
+                _hardBindEdges = previouslyStashedHardBindEdges;
 
                 // If during inlining we found new inlinees, then if the inline was successful, add them to the set of fixups
                 // for the entire method.
@@ -3550,6 +3496,7 @@ namespace Internal.JitInterface
                 // If we didn't succeed on the inline, just pop back to the state before inlining
                 _precodeFixups = _stashedPrecodeFixups.Pop();
                 _inlinedMethods = _stashedInlinedMethods.Pop();
+                _hardBindEdges = _stashedHardBindEdges.Pop();
             }
         }
 

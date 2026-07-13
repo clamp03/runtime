@@ -14313,6 +14313,39 @@ BOOL LoadDynamicInfoEntry(Module *currentModule,
         }
         break;
 
+    case READYTORUN_FIXUP_MethodPrepare:
+        {
+            pMD = ZapSig::DecodeMethod(currentModule, pInfoModule, pBlob);
+
+            pMD->PrepareForUseAsADependencyOfANativeImage();
+
+            // Activate the callee's module: a hard-bound (direct) call transfers control
+            // without going through an import cell, so nothing else on the call path
+            // performs the activation that ExternalMethodFixupWorker would do.
+            pMD->EnsureActive();
+
+            // Prepare the callee's precompiled body before the hard-bound caller's entry
+            // point is published: this runs the callee's own fixup list (transitively
+            // preparing the callee's own hard-bound callees) and registers the callee's
+            // entry point in the entry-point->MethodDesc map so that GC / EH / stack
+            // walks can attribute frames of a body that may only ever be entered through
+            // direct calls (never through the prestub).
+            {
+                PrepareCodeConfig config(NativeCodeVersion(pMD), TRUE /* needsMulticoreJitNotification */, TRUE /* mayUsePrecompiledCode */);
+                PCODE pPrecompiledCode = pMD->GetPrecompiledR2RCode(&config);
+                if (pPrecompiledCode == (PCODE)NULL)
+                {
+                    // The callee has no usable precompiled body here (e.g. rejected by a
+                    // Check_* fixup or the profiler). The caller's direct call is baked to
+                    // that body, so reject the caller's precompiled code as well; the
+                    // caller falls back to the JIT, which calls the callee normally.
+                    return FALSE;
+                }
+                result = (size_t)pPrecompiledCode;
+            }
+        }
+        break;
+
     case READYTORUN_FIXUP_IndirectPInvokeTarget:
         {
             MethodDesc *pMethod = ZapSig::DecodeMethod(currentModule, pInfoModule, pBlob);

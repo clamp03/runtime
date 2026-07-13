@@ -2349,9 +2349,13 @@ public:
     bool TryPublishR2RCodeForUnmanagedCallersOnly();
 #endif // FEATURE_PORTABLE_ENTRYPOINTS
 
+public:
+    // Also used by the READYTORUN_FIXUP_MethodPrepare handler (hard-bound direct-call
+    // callee preparation, see LoadDynamicInfoEntry in jitinterface.cpp).
+    PCODE GetPrecompiledR2RCode(PrepareCodeConfig* pConfig);
+
 private:
     PCODE GetPrecompiledCode(PrepareCodeConfig* pConfig, bool shouldTier);
-    PCODE GetPrecompiledR2RCode(PrepareCodeConfig* pConfig);
     PCODE GetMulticoreJitCode(PrepareCodeConfig* pConfig, bool* pWasTier0);
     PCODE JitCompileCode(PrepareCodeConfig* pConfig);
     PCODE JitCompileCodeLockedEventWrapper(PrepareCodeConfig* pConfig, JitListLockEntry* pEntry);

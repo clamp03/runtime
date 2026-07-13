@@ -262,6 +262,8 @@
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\GCRefMapBuilder.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\GCRefMapNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\GenericLookupSignature.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\HardBindEdge.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\HardBindStubNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\ImportThunk.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\DelegateCtorSignature.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\DevirtualizationManager.cs" />
@@ -341,6 +343,7 @@
     <Compile Include="Compiler\ReadyToRunCodegenCompilation.cs" />
     <Compile Include="Compiler\ReadyToRunCodegenCompilationBuilder.cs" />
     <Compile Include="Compiler\FileLayoutOptimizer.cs" />
+    <Compile Include="Compiler\HardBindRelaxation.cs" />
     <Compile Include="Compiler\ReadyToRunMetadataFieldLayoutAlgorithm.cs" />
     <Compile Include="Compiler\ReadyToRunSingleAssemblyCompilationModuleGroup.cs" />
     <Compile Include="Compiler\ReadyToRunStandaloneMethodMetadata.cs" />

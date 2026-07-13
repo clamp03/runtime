@@ -66,6 +66,8 @@ namespace ILCompiler
             new("--partial") { Description = SR.PartialImageOption };
         public Option<bool> CompileBubbleGenerics { get; } =
             new("--compilebubblegenerics") { Description = SR.BubbleGenericsOption };
+        public Option<bool> HardBind { get; } =
+            new("--hard-bind") { Description = SR.HardBindOption };
         public Option<bool> EmbedPgoData { get; } =
             new("--embed-pgo-data") { Description = SR.EmbedPgoDataOption };
         public Option<string> DgmlLogFileName { get; } =
@@ -185,6 +187,7 @@ namespace ILCompiler
             Options.Add(SingleFileCompilation);
             Options.Add(Partial);
             Options.Add(CompileBubbleGenerics);
+            Options.Add(HardBind);
             Options.Add(EmbedPgoData);
             Options.Add(DgmlLogFileName);
             Options.Add(GenerateFullDgmlLog);

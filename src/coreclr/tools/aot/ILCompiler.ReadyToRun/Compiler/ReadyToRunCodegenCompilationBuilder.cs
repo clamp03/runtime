@@ -40,6 +40,7 @@ namespace ILCompiler
         private int _customPESectionAlignment;
         private bool _verifyTypeAndFieldLayout;
         private bool _hotColdSplitting;
+        private bool _hardBind;
         private CompositeImageSettings _compositeImageSettings;
         private ulong _imageBase;
         private NodeFactoryOptimizationFlags _nodeFactoryOptimizationFlags = new NodeFactoryOptimizationFlags();
@@ -181,6 +182,12 @@ namespace ILCompiler
         public ReadyToRunCodegenCompilationBuilder UseCustomPESectionAlignment(int customPESectionAlignment)
         {
             _customPESectionAlignment = customPESectionAlignment;
+            return this;
+        }
+
+        public ReadyToRunCodegenCompilationBuilder UseHardBind(bool hardBind)
+        {
+            _hardBind = hardBind;
             return this;
         }
 
@@ -353,7 +360,8 @@ namespace ILCompiler
                 _r2rFileLayoutAlgorithm,
                 _customPESectionAlignment,
                 _verifyTypeAndFieldLayout,
-                _format);
+                _format,
+                _hardBind);
         }
     }
 }

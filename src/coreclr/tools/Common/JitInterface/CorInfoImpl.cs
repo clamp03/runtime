@@ -570,6 +570,11 @@ namespace Internal.JitInterface
                 }
             }
 
+            if (_hardBindEdges != null)
+            {
+                _methodCodeNode.SetHardBindEdges(_hardBindEdges);
+            }
+
             if (_synthesizedPgoDependencies != null)
             {
                 Debug.Assert(_compilation.NodeFactory.InstrumentationDataTable != null, "Expected InstrumentationDataTable to be non-null with synthesized PGO data to embed");
@@ -717,6 +722,8 @@ namespace Internal.JitInterface
             _precodeFixups = null;
             _stashedPrecodeFixups.Clear();
             _stashedInlinedMethods.Clear();
+            _hardBindEdges = null;
+            _stashedHardBindEdges.Clear();
             _ilBodiesNeeded = null;
             _synthesizedPgoDependencies = null;
 #endif
