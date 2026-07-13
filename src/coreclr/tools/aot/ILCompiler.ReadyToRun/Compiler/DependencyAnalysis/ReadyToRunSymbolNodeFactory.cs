@@ -166,6 +166,13 @@ namespace ILCompiler.DependencyAnalysis
                 return new PrecodeHelperImport(_codegenNodeFactory, key);
             });
 
+            _checkVirtualSlotCache = new NodeCache<CheckVirtualSlotKey, Import>(key =>
+            {
+                return new PrecodeHelperImport(
+                    _codegenNodeFactory,
+                    new CheckVirtualSlotSignature(key.Method, key.Slot, key.OffsetOfIndirection, key.OffsetAfterIndirection));
+            });
+
             _ilBodyFixupsCache = new NodeCache<ILBodyFixupSignature, Import>(key => new PrecodeHelperImport(_codegenNodeFactory.ILBodyPrecodeImports, key));
 
             _genericLookupHelpers = new NodeCache<GenericLookupKey, Import>(key =>
@@ -515,6 +522,18 @@ namespace ILCompiler.DependencyAnalysis
             return _virtualFunctionOverrideCache.GetOrAdd(_codegenNodeFactory.VirtualResolutionFixupSignature(fixupKind, declMethod, implType, implMethod));
         }
 
+        private NodeCache<CheckVirtualSlotKey, Import> _checkVirtualSlotCache;
+
+        /// <summary>
+        /// Check_VirtualSlot fixup for a --hard-bind fragile vtable dispatch call site: verifies
+        /// at runtime that <paramref name="method"/> got the predicted vtable slot and that the
+        /// baked MethodTable layout offsets match; on mismatch the caller's code is rejected.
+        /// </summary>
+        public Import CheckVirtualSlot(MethodWithToken method, uint slot, uint offsetOfIndirection, uint offsetAfterIndirection)
+        {
+            return _checkVirtualSlotCache.GetOrAdd(new CheckVirtualSlotKey(method, slot, offsetOfIndirection, offsetAfterIndirection));
+        }
+
         private NodeCache<ILBodyFixupSignature, Import> _ilBodyFixupsCache;
         public Import CheckILBodyFixupSignature(MethodDesc method)
         {
@@ -555,6 +574,40 @@ namespace ILCompiler.DependencyAnalysis
             {
                 return (CallingMethod != null ? unchecked(199 * CallingMethod.GetHashCode()) : 0)
                     ^ unchecked(31 * Method.GetHashCode());
+            }
+        }
+
+        private struct CheckVirtualSlotKey : IEquatable<CheckVirtualSlotKey>
+        {
+            public readonly MethodWithToken Method;
+            public readonly uint Slot;
+            public readonly uint OffsetOfIndirection;
+            public readonly uint OffsetAfterIndirection;
+
+            public CheckVirtualSlotKey(MethodWithToken method, uint slot, uint offsetOfIndirection, uint offsetAfterIndirection)
+            {
+                Method = method;
+                Slot = slot;
+                OffsetOfIndirection = offsetOfIndirection;
+                OffsetAfterIndirection = offsetAfterIndirection;
+            }
+
+            public bool Equals(CheckVirtualSlotKey other)
+            {
+                return Slot == other.Slot
+                    && OffsetOfIndirection == other.OffsetOfIndirection
+                    && OffsetAfterIndirection == other.OffsetAfterIndirection
+                    && Method.Equals(other.Method);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is CheckVirtualSlotKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                return unchecked(31 * Method.GetHashCode() + 199 * (int)Slot + 41 * (int)OffsetOfIndirection + 13 * (int)OffsetAfterIndirection);
             }
         }
 

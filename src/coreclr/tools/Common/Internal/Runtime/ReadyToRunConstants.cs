@@ -197,6 +197,8 @@ namespace Internal.ReadyToRunConstants
 
         MethodPrepare = 0x3A, /* Prepare the precompiled body of a hard-bound callee: activate its module, run its fixup list and register its entry point before the caller's code is published */
 
+        Check_VirtualSlot = 0x3B, /* Check that a method got the vtable slot (and MethodTable layout offsets) that a hard-bound caller baked into its vtable dispatch call sites. On mismatch the caller's code is not used */
+
         ModuleOverride = 0x80,
         // followed by sig-encoded UInt with assemblyref index into either the assemblyref
         // table of the MSIL metadata of the master context module for the signature or

@@ -486,6 +486,15 @@ namespace Internal.JitInterface
         private UnboxingMethodDescFactory _unboxingThunkFactory = new UnboxingMethodDescFactory();
         private List<ISymbolNode> _precodeFixups;
         private List<HardBindEdge> _hardBindEdges;
+
+        /// <summary>
+        /// Vtable slot info computed by the --hard-bind fragile vtable dispatch eligibility check
+        /// in ceeInfoGetCallInfo for methods dispatched via CORINFO_VIRTUALCALL_VTABLE; consumed
+        /// by the Check_VirtualSlot fixup emission and the getMethodVTableOffset JIT-EE callback.
+        /// Values are deterministic per method, so entries are never invalidated (no stashing
+        /// across inlining contexts needed).
+        /// </summary>
+        private Dictionary<MethodDesc, HardBindVirtualSlotInfo> _hardBindVirtualSlots;
         private List<MethodDesc> _ilBodiesNeeded;
         private Dictionary<TypeDesc, bool> _preInitedTypes = new Dictionary<TypeDesc, bool>();
         private HashSet<MethodDesc> _synthesizedPgoDependencies;
@@ -2364,6 +2373,29 @@ namespace Internal.JitInterface
                     pResult->kind = CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_VTABLE;
                 }
                 */
+
+                // Hard bind: fragile vtable dispatch (the #7168 idea above, gated on --hard-bind's
+                // closed-world assumption instead of the corelib bubble). When the vtable slot the
+                // runtime MethodTableBuilder will assign is predictable at compile time, emit the
+                // call as direct vtable dispatch (two dependent loads + indirect call) instead of
+                // a VirtualStubDispatch import cell. A Check_VirtualSlot fixup emitted into this
+                // (caller's) fixup list makes the runtime verify the predicted slot and the baked
+                // MethodTable layout offsets; a mismatch rejects only the caller's precompiled
+                // code (JIT fallback), so a wrong prediction can never cause mis-dispatch.
+                if (_compilation.HardBindEnabled
+                    && constrainedType == null
+                    && !pResult->exactContextNeedsRuntimeLookup
+                    && _compilation.NodeFactory.CompilationModuleGroup.VersionsWithMethodBody(callerMethod)
+                    && _compilation.NodeFactory.CompilationModuleGroup.VersionsWithMethodBody(targetMethod.GetTypicalMethodDefinition())
+                    // Unstable ABI would throw RequiresRuntimeJitException in the VTABLE switch
+                    // case below; keep such calls on the VSD path instead.
+                    && !MethodSignatureIsUnstable(targetMethod.Signature, out _)
+                    && TryComputeHardBindVirtualSlot(targetMethod, out HardBindVirtualSlotInfo hardBindSlotInfo))
+                {
+                    pResult->kind = CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_VTABLE;
+                    _hardBindVirtualSlots ??= new Dictionary<MethodDesc, HardBindVirtualSlotInfo>();
+                    _hardBindVirtualSlots[targetMethod] = hardBindSlotInfo;
+                }
             }
             else
             {
@@ -2471,6 +2503,52 @@ namespace Internal.JitInterface
             {
                 throw new RequiresRuntimeJitException(unstableMessage);
             }
+        }
+
+        private struct HardBindVirtualSlotInfo
+        {
+            public uint Slot;
+            public uint OffsetOfIndirection;
+            public uint OffsetAfterIndirection;
+        }
+
+        /// <summary>
+        /// Stage-1 eligibility gate for --hard-bind fragile vtable dispatch: predicts the vtable
+        /// slot the runtime will assign to <paramref name="targetMethod"/> and derives the two
+        /// MethodTable layout offsets RyuJIT bakes into the call sequence
+        /// (mirrors CEEInfo::getMethodVTableOffset). Returns false when prediction is not
+        /// possible; the call then stays on the VSD path.
+        /// </summary>
+        private bool TryComputeHardBindVirtualSlot(MethodDesc targetMethod, out HardBindVirtualSlotInfo info)
+        {
+            info = default;
+
+            // Generic virtual methods and interface methods never reach the non-interface
+            // virtual call branch that consults this.
+            Debug.Assert(!targetMethod.HasInstantiation && !targetMethod.OwningType.IsInterface);
+
+            // Canonical / shared-generic owners are stage-1 excluded (the slot algorithm also
+            // bails on them, this just makes the intent explicit).
+            if (targetMethod.OwningType.IsCanonicalSubtype(CanonicalFormKind.Any))
+                return false;
+
+            // The baked slot is determined by the entire base hierarchy (inherited slots come
+            // first); it is only stable if all of it versions with this compilation.
+            for (TypeDesc hierarchyType = targetMethod.OwningType; hierarchyType != null; hierarchyType = hierarchyType.BaseType)
+            {
+                if (!_compilation.NodeFactory.CompilationModuleGroup.VersionsWithType(hierarchyType))
+                    return false;
+            }
+
+            int slot = _compilation.HardBindVirtualSlotAlgorithm.GetVirtualSlot(targetMethod);
+            if (slot < 0)
+                return false;
+
+            int pointerSize = _compilation.TypeSystemContext.Target.PointerSize;
+            info.Slot = (uint)slot;
+            info.OffsetOfIndirection = CoreClrVirtualSlotAlgorithm.GetOffsetOfIndirection(slot, pointerSize, _compilation.HardBindDebugMTLayout);
+            info.OffsetAfterIndirection = CoreClrVirtualSlotAlgorithm.GetOffsetAfterIndirection(slot, pointerSize);
+            return true;
         }
 
         private void getCallInfo(ref CORINFO_RESOLVED_TOKEN pResolvedToken, CORINFO_RESOLVED_TOKEN* pConstrainedResolvedToken, CORINFO_METHOD_STRUCT_* callerHandle, CORINFO_CALLINFO_FLAGS flags, CORINFO_CALL_INFO* pResult)
@@ -2674,11 +2752,26 @@ namespace Internal.JitInterface
                     break;
 
                 case CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_VTABLE:
-                    // Only calls within the CoreLib version bubble support fragile NI codegen with vtable based calls, for better performance (because
-                    // CoreLib and the runtime will always be updated together anyways - this is a special case)
+                    {
+                        // Fragile vtable dispatch under --hard-bind: RyuJIT bakes the offsets
+                        // returned by getMethodVTableOffset into the call sequence (no import
+                        // cell). The Check_VirtualSlot fixup added below makes the runtime verify
+                        // the predicted slot/offsets before publishing this caller's code.
 
-                    // Eagerly check abi stability here as no symbol usage can be used to delay the check
-                    VerifyMethodSignatureIsStable(targetMethod.Signature);
+                        // Eagerly check abi stability here as no symbol usage can be used to delay the check
+                        VerifyMethodSignatureIsStable(targetMethod.Signature);
+
+                        if (_hardBindVirtualSlots == null || !_hardBindVirtualSlots.TryGetValue(methodToCall, out HardBindVirtualSlotInfo hardBindSlotInfo))
+                        {
+                            // CORINFO_VIRTUALCALL_VTABLE is only selected by the hard-bind
+                            // eligibility check in ceeInfoGetCallInfo, which records the slot.
+                            throw new RequiresRuntimeJitException("CORINFO_VIRTUALCALL_VTABLE without a computed vtable slot: " + methodToCall);
+                        }
+
+                        AddPrecodeFixup(_compilation.SymbolNodeFactory.CheckVirtualSlot(
+                            ComputeMethodWithToken(methodToCall, ref pResolvedToken, constrainedType: null, unboxing: false),
+                            hardBindSlotInfo.Slot, hardBindSlotInfo.OffsetOfIndirection, hardBindSlotInfo.OffsetAfterIndirection));
+                    }
                     break;
 
                 case CORINFO_CALL_KIND.CORINFO_VIRTUALCALL_LDVIRTFTN:
@@ -3190,7 +3283,20 @@ namespace Internal.JitInterface
         }
 
         private void getMethodVTableOffset(CORINFO_METHOD_STRUCT_* method, ref uint offsetOfIndirection, ref uint offsetAfterIndirection, ref bool isRelative)
-        { throw new NotImplementedException("getMethodVTableOffset"); }
+        {
+            // Only reachable for CORINFO_VIRTUALCALL_VTABLE calls (--hard-bind fragile vtable
+            // dispatch); the eligibility check in ceeInfoGetCallInfo records the slot info for
+            // every method it dispatches that way (the JIT passes callInfo->hMethod back here).
+            MethodDesc methodDesc = HandleToObject(method);
+            if (_hardBindVirtualSlots == null || !_hardBindVirtualSlots.TryGetValue(methodDesc, out HardBindVirtualSlotInfo hardBindSlotInfo))
+            {
+                throw new RequiresRuntimeJitException("getMethodVTableOffset: no vtable slot recorded for " + methodDesc);
+            }
+
+            offsetOfIndirection = hardBindSlotInfo.OffsetOfIndirection;
+            offsetAfterIndirection = hardBindSlotInfo.OffsetAfterIndirection;
+            isRelative = false;
+        }
         private void expandRawHandleIntrinsic(ref CORINFO_RESOLVED_TOKEN pResolvedToken, CORINFO_METHOD_STRUCT_* callerHandle, ref CORINFO_GENERICHANDLE_RESULT pResult)
         { throw new NotImplementedException("expandRawHandleIntrinsic"); }
 

@@ -14785,6 +14785,64 @@ BOOL LoadDynamicInfoEntry(Module *currentModule,
         }
         break;
 
+    case READYTORUN_FIXUP_Check_VirtualSlot:
+        {
+            // Emitted by crossgen2 --hard-bind for fragile vtable dispatch call sites: the
+            // caller's code has the callee's vtable slot offsets baked in as immediates.
+            // Verify that the runtime MethodTableBuilder assigned the slot the compiler
+            // predicted and that the baked MethodTable layout offsets match this runtime
+            // flavor. On mismatch, return FALSE so the caller's precompiled code is rejected
+            // (SetReadyToRunRejectedPrecompiledCode) and the caller falls back to the JIT.
+            PCCOR_SIGNATURE updatedSignature = pBlob;
+
+            CorSigUncompressData(updatedSignature); // flags (reserved, 0)
+
+            SigTypeContext typeContext;    // empty context is OK: encoding should not contain type variables.
+            ZapSig::Context zapSigContext(pInfoModule, (void *)currentModule, ZapSig::NormalTokens);
+            MethodDesc *pMD = ZapSig::DecodeMethod(pInfoModule, updatedSignature, &typeContext, &zapSigContext, NULL, NULL, NULL, &updatedSignature, TRUE);
+
+            DWORD expectedSlot = CorSigUncompressData(updatedSignature);
+            DWORD expectedOffsetOfIndirection = CorSigUncompressData(updatedSignature);
+            DWORD expectedOffsetAfterIndirection = CorSigUncompressData(updatedSignature);
+
+            if (pMD->HasMethodInstantiation() || !pMD->IsVtableMethod())
+            {
+                return FALSE;
+            }
+
+            // Same anchor CEEInfo::getMethodVTableOffset dispatches jitted callers on.
+            if (pMD->GetSlot() != expectedSlot || expectedSlot >= pMD->GetMethodTable()->GetNumVirtuals())
+            {
+                return FALSE;
+            }
+
+            // Encoding the offsets (not just the slot) makes the check self-verifying against
+            // MethodTable layout drift (including Debug/Checked vs Release header size).
+            if (expectedOffsetOfIndirection != MethodTable::GetVtableOffset()
+                    + MethodTable::GetIndexOfVtableIndirection(expectedSlot) * TARGET_POINTER_SIZE)
+            {
+                return FALSE;
+            }
+
+            if (expectedOffsetAfterIndirection != MethodTable::GetIndexAfterVtableIndirection(expectedSlot) * TARGET_POINTER_SIZE)
+            {
+                return FALSE;
+            }
+
+            // A slot-defining method's own vtable slot is left NULL until its temporary entry
+            // point is allocated (lazy precode allocation; see EnsureTemporaryEntryPointCore and
+            // the "defining the method desc slot" case in MethodTableBuilder::SetupMethodTable2).
+            // Jitted callers get this via CEEInfo::getMethodVTableOffset at JIT time; do the same
+            // here before the hard-bound caller's code is published, so its baked vtable dispatch
+            // never loads a NULL slot. (Derived MethodTables either share the defining type's
+            // vtable chunk - and observe this write - or eagerly copied a non-NULL entry point
+            // when they were built; overriding slots are always filled eagerly.)
+            pMD->EnsureTemporaryEntryPoint();
+
+            result = 1;
+        }
+        break;
+
 
     case READYTORUN_FIXUP_Check_InstructionSetSupport:
         {

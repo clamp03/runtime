@@ -667,6 +667,7 @@ namespace ILCompiler
                         .UseCustomPESectionAlignment(Get(_command.CustomPESectionAlignment))
                         .UseVerifyTypeAndFieldLayout(Get(_command.VerifyTypeAndFieldLayout))
                         .UseHardBind(Get(_command.HardBind))
+                        .UseHardBindDebugMTLayout(Get(_command.HardBindDebugMTLayout))
                         .UseHotColdSplitting(Get(_command.HotColdSplitting))
                         .GenerateOutputFile(outFile)
                         .UseImageBase(_imageBase)

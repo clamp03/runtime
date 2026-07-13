@@ -311,6 +311,20 @@ namespace ILCompiler
         /// image are emitted as direct calls (resolved by HardBindRelaxation at emission).
         /// </summary>
         public bool HardBindEnabled { get; }
+
+        /// <summary>
+        /// True when --hard-bind-debug-mt-layout is in effect: the MethodTable layout constants
+        /// baked by the hard-bind fragile vtable dispatch assume a Debug/Checked runtime (one
+        /// extra debug-only pointer in the MethodTable header). Only for testing hard-bind
+        /// images against a Checked runtime build; product images use the Release layout.
+        /// </summary>
+        public bool HardBindDebugMTLayout { get; }
+
+        /// <summary>
+        /// Predicts runtime vtable slot assignment for --hard-bind fragile vtable dispatch
+        /// (caches per-type layouts across the whole compilation).
+        /// </summary>
+        public CoreClrVirtualSlotAlgorithm HardBindVirtualSlotAlgorithm { get; } = new CoreClrVirtualSlotAlgorithm();
         public ReadyToRunCompilationModuleGroupBase CompilationModuleGroup { get; }
         private readonly int _customPESectionAlignment;
         private readonly ReadyToRunContainerFormat _format;
@@ -351,7 +365,8 @@ namespace ILCompiler
             int customPESectionAlignment,
             bool verifyTypeAndFieldLayout,
             ReadyToRunContainerFormat format,
-            bool hardBind)
+            bool hardBind,
+            bool hardBindDebugMTLayout)
             : base(
                   dependencyGraph,
                   nodeFactory,
@@ -377,6 +392,7 @@ namespace ILCompiler
             _customPESectionAlignment = customPESectionAlignment;
             _format = format;
             HardBindEnabled = hardBind;
+            HardBindDebugMTLayout = hardBindDebugMTLayout;
             SymbolNodeFactory = new ReadyToRunSymbolNodeFactory(nodeFactory, verifyTypeAndFieldLayout);
             if (nodeFactory.InstrumentationDataTable != null)
                 nodeFactory.InstrumentationDataTable.Initialize(SymbolNodeFactory);

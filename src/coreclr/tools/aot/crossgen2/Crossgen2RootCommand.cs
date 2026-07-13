@@ -68,6 +68,8 @@ namespace ILCompiler
             new("--compilebubblegenerics") { Description = SR.BubbleGenericsOption };
         public Option<bool> HardBind { get; } =
             new("--hard-bind") { Description = SR.HardBindOption };
+        public Option<bool> HardBindDebugMTLayout { get; } =
+            new("--hard-bind-debug-mt-layout") { Description = "Bake Debug/Checked runtime MethodTable layout into --hard-bind vtable dispatch (testing against a Checked runtime only)", Hidden = true };
         public Option<bool> EmbedPgoData { get; } =
             new("--embed-pgo-data") { Description = SR.EmbedPgoDataOption };
         public Option<string> DgmlLogFileName { get; } =
@@ -188,6 +190,7 @@ namespace ILCompiler
             Options.Add(Partial);
             Options.Add(CompileBubbleGenerics);
             Options.Add(HardBind);
+            Options.Add(HardBindDebugMTLayout);
             Options.Add(EmbedPgoData);
             Options.Add(DgmlLogFileName);
             Options.Add(GenerateFullDgmlLog);

@@ -1467,6 +1467,17 @@ namespace ILCompiler.Reflection.ReadyToRun
                     builder.Append(" (PINVOKE_TARGET)");
                     break;
 
+                case ReadyToRunFixupKind.Check_VirtualSlot:
+                    {
+                        ReadUInt(); // flags (reserved)
+                        ParseMethod(builder);
+                        uint expectedSlot = ReadUInt();
+                        uint expectedOffsetOfIndirection = ReadUInt();
+                        uint expectedOffsetAfterIndirection = ReadUInt();
+                        builder.Append($" (CHECK_VIRTUAL_SLOT slot={expectedSlot} offsets=0x{expectedOffsetOfIndirection:x}/0x{expectedOffsetAfterIndirection:x})");
+                    }
+                    break;
+
                 case ReadyToRunFixupKind.Check_IL_Body:
                 case ReadyToRunFixupKind.Verify_IL_Body:
                     uint ilBodyByteBlobSize = ReadUInt();

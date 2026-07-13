@@ -41,6 +41,7 @@ namespace ILCompiler
         private bool _verifyTypeAndFieldLayout;
         private bool _hotColdSplitting;
         private bool _hardBind;
+        private bool _hardBindDebugMTLayout;
         private CompositeImageSettings _compositeImageSettings;
         private ulong _imageBase;
         private NodeFactoryOptimizationFlags _nodeFactoryOptimizationFlags = new NodeFactoryOptimizationFlags();
@@ -188,6 +189,12 @@ namespace ILCompiler
         public ReadyToRunCodegenCompilationBuilder UseHardBind(bool hardBind)
         {
             _hardBind = hardBind;
+            return this;
+        }
+
+        public ReadyToRunCodegenCompilationBuilder UseHardBindDebugMTLayout(bool hardBindDebugMTLayout)
+        {
+            _hardBindDebugMTLayout = hardBindDebugMTLayout;
             return this;
         }
 
@@ -361,7 +368,8 @@ namespace ILCompiler
                 _customPESectionAlignment,
                 _verifyTypeAndFieldLayout,
                 _format,
-                _hardBind);
+                _hardBind,
+                _hardBindDebugMTLayout);
         }
     }
 }

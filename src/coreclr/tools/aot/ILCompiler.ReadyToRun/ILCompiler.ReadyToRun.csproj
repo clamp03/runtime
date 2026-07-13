@@ -260,6 +260,7 @@
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\DebugInfoTableNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\DelayLoadHelperImport.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\GCRefMapBuilder.cs" />
+    <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\CheckVirtualSlotSignature.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\GCRefMapNode.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\GenericLookupSignature.cs" />
     <Compile Include="Compiler\DependencyAnalysis\ReadyToRun\HardBindEdge.cs" />
@@ -342,6 +343,7 @@
     <Compile Include="Compiler\ReadyToRunCompilerContext.cs" />
     <Compile Include="Compiler\ReadyToRunCodegenCompilation.cs" />
     <Compile Include="Compiler\ReadyToRunCodegenCompilationBuilder.cs" />
+    <Compile Include="Compiler\CoreClrVirtualSlotAlgorithm.cs" />
     <Compile Include="Compiler\FileLayoutOptimizer.cs" />
     <Compile Include="Compiler\HardBindRelaxation.cs" />
     <Compile Include="Compiler\ReadyToRunMetadataFieldLayoutAlgorithm.cs" />
