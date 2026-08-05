@@ -34,6 +34,7 @@ extern bool g_gcHeapHardLimitInfoSpecified;
 
 #include <generatedumpflags.h>
 #include "gcrefmap.h"
+#include "compressedptr.h"
 
 void GCToEEInterface::SuspendEE(SUSPEND_REASON reason)
 {
@@ -878,6 +879,14 @@ void GCToEEInterface::DiagUpdateGenerationBounds()
 
 void GCToEEInterface::DiagGCEnd(size_t index, int gen, int reason, bool fConcurrent)
 {
+    // ARM64 memory optimization sizing: the EE is suspended and the heap is walkable here, which
+    // is what the census needs. No-op unless DOTNET_CompressedPtrHeapCensus is set.
+    // See arm64-low-va-memory-opt/STAGE-B-POINTER-COMPRESSION.md.
+    if (!fConcurrent)
+    {
+        ReportCompressedPtrHeapCensus(gen);
+    }
+
 #if defined(GC_PROFILING) || defined(PERFTRACING_DISABLE_THREADS)
     // We were only doing generation bounds and GC finish callback for non concurrent GCs so
     // I am keeping that behavior to not break profilers. But if BasicGC monitoring is enabled

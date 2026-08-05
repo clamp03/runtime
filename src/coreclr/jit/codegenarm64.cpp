@@ -4150,6 +4150,10 @@ void CodeGen::genCodeForStoreInd(GenTreeStoreInd* tree)
         instruction ins  = ins_StoreFromSrc(dataReg, type);
         emitAttr    attr = emitActualTypeSize(type);
 
+        // Storing a reference into the heap without a write barrier: 4 bytes, leaving the upper
+        // half of a not-yet-narrowed slot at zero. See emitNarrowGCRefAccess.
+        attr = genNarrowGCRefAccessForIndir(attr, tree, true);
+
         // Handle instances with a variable length store
         if (varTypeUsesMaskReg(type))
         {

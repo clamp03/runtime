@@ -1,0 +1,7 @@
+<!--
+  These are standalone throwaway apps run against a built runtime under QEMU, not part of the
+  product build. This empty file stops the repository's Directory.Build.props (analyzers, required
+  file headers, arcade conventions) from applying to them, so they build with the plain SDK.
+-->
+<Project>
+</Project>

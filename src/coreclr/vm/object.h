@@ -12,6 +12,7 @@
 #ifndef _OBJECT_H_
 #define _OBJECT_H_
 
+#include "compressedptr.h"
 #include "util.hpp"
 #include "syncblk.h"
 #include "gcdesc.h"
@@ -22,6 +23,9 @@
 extern "C" void __fastcall ZeroMemoryInGCHeap(void*, size_t);
 
 void ErectWriteBarrierForMT(MethodTable **dst, MethodTable *ref);
+#ifdef FEATURE_COMPRESSED_MT
+void ErectWriteBarrierForCompressedMT(uint32_t *dst, MethodTable *ref);
+#endif
 
 /*
  #ObjectModel
@@ -127,7 +131,34 @@ class Object
     friend class CheckAsmOffsets;
 
   protected:
+#ifdef FEATURE_COMPRESSED_MT
+    // Stage B1 of the ARM64 memory optimization work (see arm64-low-va-memory-opt/): store the
+    // MethodTable pointer in 4 bytes instead of 8. Valid only while every MethodTable lives
+    // below 4 GB; DOTNET_ValidateCompressedPtr proves that precondition.
+    //
+    // Kept as a raw uint32_t rather than CompressedPtr<MethodTable> because the GC steals the
+    // low bit of this field as a mark bit (see MARKED_BIT below), so the field is manipulated
+    // as an integer in several places.
+    uint32_t m_pMethTab;
+
+    // Stage B1a: while object references are still 8 bytes wide, the first instance field of a
+    // reference-typed object has to stay 8 byte aligned, so narrowing the MethodTable slot on its
+    // own buys padding rather than space. Keeping the padding explicit means sizeof(Object) stays
+    // 8 and every other layout in the runtime (native mirror structs in this header, the field
+    // offsets binder.cpp cross-checks, the JIT, the assembly helpers) is unchanged, which lets the
+    // narrowed slot be validated end to end before any layout is disturbed.
+    //
+    // It also keeps existing 8 byte MethodTable loads correct: the padding is always zero (GC
+    // memory is zero initialized and the allocation helpers store a full width pointer whose upper
+    // half is zero under the low-VA precondition), so a 64 bit load of the slot still yields the
+    // MethodTable pointer.
+    //
+    // The padding is what Stage B2 removes once references are narrowed too; that is where the
+    // per-object saving actually comes from.
+    uint32_t m_mtPadding;
+#else
     PTR_MethodTable m_pMethTab;
+#endif // FEATURE_COMPRESSED_MT
 
   protected:
     Object() { LIMITED_METHOD_CONTRACT; };
@@ -136,14 +167,23 @@ class Object
   public:
     MethodTable *RawGetMethodTable() const
     {
+#ifdef FEATURE_COMPRESSED_MT
+        return reinterpret_cast<MethodTable*>(static_cast<uintptr_t>(m_pMethTab));
+#else
         return m_pMethTab;
+#endif
     }
 
 #ifndef DACCESS_COMPILE
     void RawSetMethodTable(MethodTable *pMT)
     {
         LIMITED_METHOD_CONTRACT;
+#ifdef FEATURE_COMPRESSED_MT
+        _ASSERTE(AddressFitsInCompressedPtr(pMT));
+        m_pMethTab = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pMT));
+#else
         m_pMethTab = pMT;
+#endif
     }
 
     VOID SetMethodTable(MethodTable *pMT)
@@ -156,7 +196,11 @@ class Object
     {
         WRAPPER_NO_CONTRACT;
         // This function must be used if the allocation occurs on a UOH heap, and the method table might be a collectible type
+#ifdef FEATURE_COMPRESSED_MT
+        ErectWriteBarrierForCompressedMT(&m_pMethTab, pMT);
+#else
         ErectWriteBarrierForMT(&m_pMethTab, pMT);
+#endif
     }
 #endif //!DACCESS_COMPILE
 
@@ -165,6 +209,16 @@ class Object
     PTR_MethodTable GetMethodTable() const
     {
         LIMITED_METHOD_DAC_CONTRACT;
+
+#ifdef FEATURE_COMPRESSED_MT
+        // Signature is intentionally unchanged so that the ~1100 existing callers keep working.
+    #ifndef DACCESS_COMPILE
+        _ASSERTE((m_pMethTab & MARKED_BIT) == 0);
+        return reinterpret_cast<MethodTable*>(static_cast<uintptr_t>(m_pMethTab));
+    #else
+        return PTR_MethodTable(static_cast<TADDR>(m_pMethTab & ~MARKED_BIT));
+    #endif
+#else // !FEATURE_COMPRESSED_MT
 
 #ifndef DACCESS_COMPILE
         // We should always use GetGCSafeMethodTable() if we're running during a GC.
@@ -178,13 +232,25 @@ class Object
         //when available
         return PTR_MethodTable((dac_cast<TADDR>(m_pMethTab)) & (~MARKED_BIT));
 #endif //DACCESS_COMPILE
+
+#endif // FEATURE_COMPRESSED_MT
     }
 
+#ifndef FEATURE_COMPRESSED_MT
     DPTR(PTR_MethodTable) GetMethodTablePtr() const
     {
         LIMITED_METHOD_CONTRACT;
         return dac_cast<DPTR(PTR_MethodTable)>(PTR_HOST_MEMBER_TADDR(Object, this, m_pMethTab));
     }
+#else
+    // The slot is 4 bytes wide under compression, so the old contract (a pointer to a full width
+    // MethodTable*) cannot be honored. Callers must be migrated; see STAGE-B doc.
+    DPTR(uint32_t) GetMethodTablePtr() const
+    {
+        LIMITED_METHOD_CONTRACT;
+        return dac_cast<DPTR(uint32_t)>(PTR_HOST_MEMBER_TADDR(Object, this, m_pMethTab));
+    }
+#endif // !FEATURE_COMPRESSED_MT
 
     TypeHandle      GetTypeHandle();
 
@@ -361,7 +427,11 @@ class Object
         // significant bit for marked objects, and the second to least significant
         // bit is reserved.  So if we want the actual MT pointer during a GC
         // we must zero out the lowest 2 bits on 32-bit and 3 bits on 64-bit.
-#ifdef TARGET_64BIT
+#ifdef FEATURE_COMPRESSED_MT
+        // The compressed slot still carries the GC mark bit and the reserved bit in its low bits.
+        // MethodTables are at least 8 byte aligned, so masking 3 bits is correct here too.
+        return dac_cast<PTR_MethodTable>(static_cast<TADDR>(m_pMethTab) & ~((UINT_PTR)7));
+#elif defined(TARGET_64BIT)
         return dac_cast<PTR_MethodTable>((dac_cast<TADDR>(m_pMethTab)) & ~((UINT_PTR)7));
 #else
         return dac_cast<PTR_MethodTable>((dac_cast<TADDR>(m_pMethTab)) & ~((UINT_PTR)3));

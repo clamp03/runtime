@@ -1624,6 +1624,45 @@ void ErectWriteBarrier(OBJECTREF *dst, OBJECTREF ref)
 }
 #include <optdefault.h>
 
+#ifdef FEATURE_COMPRESSED_MT
+// Compressed (4 byte) MethodTable slot variant of ErectWriteBarrierForMT. The card marking below
+// only needs the address of the slot, so it works unchanged for a narrower slot; only the store
+// itself and the dirty-range size differ.
+void ErectWriteBarrierForCompressedMT(uint32_t *dst, MethodTable *ref)
+{
+    STATIC_CONTRACT_MODE_COOPERATIVE;
+    STATIC_CONTRACT_NOTHROW;
+    STATIC_CONTRACT_GC_NOTRIGGER;
+
+    _ASSERTE(AddressFitsInCompressedPtr(ref));
+    *dst = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(ref));
+
+    if (ref->Collectible())
+    {
+#ifdef FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+        if (GCHeapUtilities::SoftwareWriteWatchIsEnabled())
+        {
+            GCHeapUtilities::SoftwareWriteWatchSetDirty(dst, sizeof(*dst));
+        }
+#endif // FEATURE_USE_SOFTWARE_WRITE_WATCH_FOR_GC_HEAP
+
+        BYTE *refObject = *(BYTE **)ref->GetLoaderAllocatorObjectHandle();
+        if((BYTE*) refObject >= g_ephemeral_low && (BYTE*) refObject < g_ephemeral_high)
+        {
+            BYTE* pCardByte = (BYTE*)VolatileLoadWithoutBarrier(&g_card_table) + card_byte((BYTE *)dst);
+            if( !((*pCardByte) & card_bit((BYTE *)dst)) )
+            {
+                *pCardByte = 0xFF;
+
+#ifdef FEATURE_MANUALLY_MANAGED_CARD_BUNDLES
+                SetCardBundleByte((BYTE*)dst);
+#endif
+            }
+        }
+    }
+}
+#endif // FEATURE_COMPRESSED_MT
+
 void ErectWriteBarrierForMT(MethodTable **dst, MethodTable *ref)
 {
     STATIC_CONTRACT_MODE_COOPERATIVE;

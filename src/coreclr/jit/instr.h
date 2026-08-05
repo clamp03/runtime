@@ -674,6 +674,48 @@ enum emitAttr : unsigned
 
 // clang-format on
 
+//
+// FEATURE_COMPRESSED_REFS - ARM64 memory optimization, see arm64-low-va-memory-opt/.
+//
+// Narrows an access to an object reference held in the heap from 8 bytes to 4.
+//
+// The GC flag has to be *dropped*, not kept: EA_GCREF is a special value meaning "pointer sized GC
+// reference", not an orthogonal flag plus a size. emitAllocInstr (emit.cpp) forces
+// `idOpSize(EA_PTRSIZE)` for any attr with the GC flag set, so EA_GCREF_FLG|EA_4BYTE silently emits
+// an 8 byte instruction - while emitIns_R_R_I has already scaled the immediate for 4 bytes, which
+// doubles the effective offset and corrupts the heap. Losing the flag is safe because register GC
+// liveness comes from the tree type: genProduceReg calls gcMarkRegPtrVal(reg, tree->TypeGet()).
+//
+// This is correct even while reference *slots* are still 8 bytes wide. Under the low-VA
+// precondition every reference value has a zero upper 32 bits (checked at runtime by
+// DOTNET_CompressedPtrHeapCensus=2), so on a little endian target a 4 byte load of an 8 byte slot
+// yields the reference, and a 4 byte store leaves the upper half at zero. The only unsound
+// combination is the reverse - an 8 byte access to a slot that has already been narrowed - which is
+// why access width is narrowed first and storage afterwards, one object shape at a time.
+//
+// Applies to EA_GCREF only. EA_BYREF is an interior pointer that may address the stack or
+// unmanaged memory, so it stays full width.
+//
+// `addressDependsOnAccessSize` must be set when the address becomes an ARM64 addressing mode that
+// derives its scale from the access size (scaled register offset, scaled immediate). Narrowing the
+// width there would silently change the effective address - the emitter asserts
+// `shiftAmount == scale`. Those cases keep full width for now and are narrowed together with the
+// storage they address, which is safe because mixed widths coexist while slots are still 8 bytes.
+//
+inline emitAttr emitNarrowGCRefAccess(emitAttr attr, bool addressDependsOnAccessSize)
+{
+#ifdef FEATURE_COMPRESSED_REFS
+    if (EA_IS_GCREF(attr) && !addressDependsOnAccessSize)
+    {
+        return (emitAttr)((((unsigned)attr) & ~((unsigned)(EA_SIZE_MASK | EA_GCREF_FLG))) |
+                          (unsigned)EA_4BYTE);
+    }
+#else
+    (void)addressDependsOnAccessSize;
+#endif // FEATURE_COMPRESSED_REFS
+    return attr;
+}
+
 /*****************************************************************************/
 #endif //_INSTR_H_
 /*****************************************************************************/

@@ -1763,6 +1763,9 @@ void CodeGen::genCodeForIndir(GenTreeIndir* tree)
     regNumber   targetReg = tree->GetRegNum();
     emitAttr    attr      = emitActualTypeSize(type);
 
+    // Loading a reference out of the heap: 4 bytes, zero extended. See emitNarrowGCRefAccess.
+    attr = genNarrowGCRefAccessForIndir(attr, tree, false);
+
     genConsumeAddress(tree->Addr());
 
     bool emitBarrier = false;

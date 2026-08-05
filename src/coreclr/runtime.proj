@@ -7,6 +7,13 @@
     <BuildRuntimeDependsOnTargets>GetPgoDataPackagePath</BuildRuntimeDependsOnTargets>
     <BuildRuntimeDependsOnTargets Condition="'$(TargetsBrowser)' == 'true'">AcquireEmscriptenSdk;$(BuildRuntimeDependsOnTargets);GenerateEmccExports</BuildRuntimeDependsOnTargets>
     <BuildRuntimeDependsOnTargets Condition="'$(TargetsWasi)' == 'true'">AcquireWasiSdk;$(BuildRuntimeDependsOnTargets)</BuildRuntimeDependsOnTargets>
+
+    <_FeatureCompressedMTCMakeValue>OFF</_FeatureCompressedMTCMakeValue>
+    <_FeatureCompressedMTCMakeValue Condition="'$(FeatureCompressedMT)' == 'true'">ON</_FeatureCompressedMTCMakeValue>
+    <_FeatureCompressedMTFieldsCMakeValue>OFF</_FeatureCompressedMTFieldsCMakeValue>
+    <_FeatureCompressedMTFieldsCMakeValue Condition="'$(FeatureCompressedMTFields)' == 'true'">ON</_FeatureCompressedMTFieldsCMakeValue>
+    <_FeatureCompressedRefsCMakeValue>OFF</_FeatureCompressedRefsCMakeValue>
+    <_FeatureCompressedRefsCMakeValue Condition="'$(FeatureCompressedRefs)' == 'true'">ON</_FeatureCompressedRefsCMakeValue>
   </PropertyGroup>
 
   <ItemGroup>
@@ -57,6 +64,16 @@
       <_CoreClrBuildArg Condition="'$(FeatureXplatEventSource)' == 'false'" Include="-cmakeargs &quot;-DFEATURE_EVENTSOURCE_XPLAT=0&quot;" />
       <_CoreClrBuildArg Condition="'$(FeatureInterpreter)' == 'true'" Include="-cmakeargs &quot;-DFEATURE_INTERPRETER=1&quot;" />
       <_CoreClrBuildArg Condition="'$(FeatureDynamicCodeCompiled)' == 'true' or '$(FeatureDynamicCodeCompiled)' == ''" Include="-cmakeargs &quot;-DFEATURE_DYNAMIC_CODE_COMPILED=1&quot;" />
+
+      <!-- ARM64 memory optimization: compressed (32 bit) pointers, default off. CoreLib mirrors the
+           native MethodTable layout, so the native definition and the CoreLib define must agree; both
+           come from these properties (see clr.featuredefines.props) so a single switch drives both.
+           The value is always passed explicitly because CMake caches it: relying on the condition
+           alone would leave a stale ON in the cache and silently desync CoreLib from the runtime.
+           See arm64-low-va-memory-opt/STAGE-B-POINTER-COMPRESSION.md. -->
+      <_CoreClrBuildArg Include="-cmakeargs &quot;-DFEATURE_COMPRESSED_MT=$(_FeatureCompressedMTCMakeValue)&quot;" />
+      <_CoreClrBuildArg Include="-cmakeargs &quot;-DFEATURE_COMPRESSED_MT_FIELDS=$(_FeatureCompressedMTFieldsCMakeValue)&quot;" />
+      <_CoreClrBuildArg Include="-cmakeargs &quot;-DFEATURE_COMPRESSED_REFS=$(_FeatureCompressedRefsCMakeValue)&quot;" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(CxxStandardLibrary)' != ''">

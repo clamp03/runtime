@@ -126,6 +126,16 @@ CONFIG_INTEGER(JitGCChecks, "JitGCChecks", 0)
 CONFIG_INTEGER(JitGCInfoLogging, "JitGCInfoLogging", 0) // If true, prints GCInfo-related output to standard output.
 CONFIG_INTEGER(JitHashBreak, "JitHashBreak", -1)        // Same as JitBreak, but for a method hash
 CONFIG_INTEGER(JitHashHalt, "JitHashHalt", -1)          // Same as JitHalt, but for a method hash
+// FEATURE_COMPRESSED_REFS bring-up (arm64-low-va-memory-opt/): bit mask selecting which heap
+// reference access shapes are narrowed to 4 bytes, so a shape can be isolated without a rebuild.
+//   0x1 contained LEA address (field access with an immediate offset)
+//   0x2 local variable address in a register (byref dereference)
+//   0x4 constant address (static field / object handle)
+//   0x8 any other address shape
+//   0x10 stores (loads are always eligible; without this only loads are narrowed)
+// Default 0x1F - every shape that is currently known to be safe. Set to 0 to make an enabled build
+// behave like a disabled one, or to a single bit to isolate a shape when something regresses.
+CONFIG_INTEGER(JitCompressedRefsMask, "JitCompressedRefsMask", 0x1F)
 CONFIG_INTEGER(JitInlineAdditionalMultiplier, "JitInlineAdditionalMultiplier", 0)
 CONFIG_INTEGER(JitInlinePrintStats, "JitInlinePrintStats", 0)
 CONFIG_INTEGER(JitInlineSize, "JitInlineSize", DEFAULT_MAX_INLINE_SIZE)

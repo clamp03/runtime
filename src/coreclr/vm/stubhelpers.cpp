@@ -70,7 +70,13 @@ static void ValidateObjectInternal(Object *pObjUNSAFE, BOOL fValidateNextObj)
             // g_pFreeObjectMethodTable to <legal-value> concurrently while executing this function.
             // Once <legal-value> is seen, we believe that the object should pass the Validate check.
             // We have to be careful and read the pointer only once to avoid "phantom reads".
+#ifdef FEATURE_COMPRESSED_MT
+            // The slot is 4 bytes wide; read it once (phantom-read safety) and then widen.
+            MethodTable *pMT = reinterpret_cast<MethodTable*>(
+                static_cast<uintptr_t>(VolatileLoad(nextObj->GetMethodTablePtr())));
+#else
             MethodTable *pMT = VolatileLoad(nextObj->GetMethodTablePtr());
+#endif
             if (pMT != NULL && pMT != g_pFreeObjectMethodTable)
             {
                 // do *not* verify the next object's syncblock - the next object is not guaranteed to

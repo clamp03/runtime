@@ -1181,6 +1181,87 @@ protected:
     void genCodeForLclAddr(GenTreeLclFld* lclAddrNode);
     void genCodeForIndexAddr(GenTreeIndexAddr* tree);
     void genCodeForIndir(GenTreeIndir* tree);
+
+    // True when the access width would also change the effective address, so the reference access
+    // must keep full width - see emitNarrowGCRefAccess in instr.h.
+    //
+    // Two cases must keep full width:
+    //
+    //  * A register index. ARM64 encodes the index shift from the access size
+    //    (emitIns_R_R_R_Ext asserts `shiftAmount == scale`), so narrowing would address the wrong
+    //    element. That is array element access, narrowed together with array storage later.
+    //  * A stack location. Only heap slots are being narrowed; a reference-typed stack slot stays 8
+    //    bytes and is scanned as 8 bytes by the GC, so a 4 byte store into one would leave the
+    //    upper half holding whatever was there and the GC would see a bogus pointer.
+    //
+    // Immediate offsets are fine: the emitter rescales the immediate from the size it is given, so
+    // the byte offset is preserved.
+    static bool genIndirAddrDependsOnAccessSize(GenTreeIndir* indir)
+    {
+        GenTree* addr = indir->Addr();
+
+        if (addr->isContained() && indir->HasIndex())
+        {
+            return true;
+        }
+
+        // Known stack references: a contained local address, or an indirection the JIT has already
+        // proven does not target the heap.
+        return addr->OperIs(GT_LCL_ADDR) || ((indir->gtFlags & GTF_IND_TGT_NOT_HEAP) != 0);
+    }
+
+    // Narrows a reference access, gated per address shape by DOTNET_JitCompressedRefsMask, and
+    // reports the decision so a JitDump shows which shapes are actually affected rather than
+    // leaving it inferred. Bring-up scaffolding for FEATURE_COMPRESSED_REFS; see
+    // arm64-low-va-memory-opt/.
+    emitAttr genNarrowGCRefAccessForIndir(emitAttr attr, GenTreeIndir* indir, bool isStore)
+    {
+#ifdef FEATURE_COMPRESSED_REFS
+        if (!EA_IS_GCREF(attr))
+        {
+            return attr;
+        }
+
+        GenTree* addr = indir->Addr();
+
+        unsigned shapeBit;
+        if (addr->isContained() && addr->OperIs(GT_LEA))
+        {
+            shapeBit = 0x1;
+        }
+        else if (addr->OperIs(GT_LCL_VAR))
+        {
+            shapeBit = 0x2;
+        }
+        else if (addr->OperIs(GT_CNS_INT))
+        {
+            shapeBit = 0x4;
+        }
+        else
+        {
+            shapeBit = 0x8;
+        }
+
+        unsigned mask    = (unsigned)JitConfig.JitCompressedRefsMask();
+        bool     blocked = genIndirAddrDependsOnAccessSize(indir) || ((mask & shapeBit) == 0) ||
+                       (isStore && ((mask & 0x10) == 0));
+
+        emitAttr narrowed = emitNarrowGCRefAccess(attr, blocked);
+
+        JITDUMP("compressed-refs: %s [%06u] addr=%s shape=0x%x contained=%d hasIndex=%d notHeap=%d -> %s\n",
+                isStore ? "store" : "load", indir->gtTreeID, GenTree::OpName(addr->OperGet()), shapeBit,
+                addr->isContained() ? 1 : 0, indir->HasIndex() ? 1 : 0,
+                ((indir->gtFlags & GTF_IND_TGT_NOT_HEAP) != 0) ? 1 : 0,
+                (narrowed != attr) ? "NARROWED" : "full width");
+
+        return narrowed;
+#else
+        (void)indir;
+        (void)isStore;
+        return attr;
+#endif // FEATURE_COMPRESSED_REFS
+    }
+
     void genCodeForNegNot(GenTreeOp* tree);
     void genCodeForBswap(GenTree* tree);
     bool genCanOmitNormalizationForBswap16(GenTree* tree);

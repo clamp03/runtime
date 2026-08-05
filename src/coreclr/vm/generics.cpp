@@ -299,7 +299,11 @@ ClassLoader::CreateTypeHandleForNonCanonicalGenericInstantiation(
     pMT->ClearFlag(MethodTable::enum_flag_GenericsMask);
     pMT->SetFlag(MethodTable::enum_flag_GenericsMask_GenericInst);
 
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+    pMT->m_pParentMethodTable.SetNull();
+#else
     pMT->m_pParentMethodTable = NULL;
+#endif
 
     pMT->SetBaseSize(pOldMT->GetBaseSize());
     pMT->SetParentMethodTable(pOldMT->GetParentMethodTable());

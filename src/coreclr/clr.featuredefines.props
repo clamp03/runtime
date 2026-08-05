@@ -86,5 +86,12 @@
         <DefineConstants Condition="'$(FeaturePortableEntryPoints)' == 'true'">$(DefineConstants);FEATURE_PORTABLE_ENTRYPOINTS</DefineConstants>
         <DefineConstants Condition="'$(FeaturePortableHelpers)' == 'true'">$(DefineConstants);FEATURE_PORTABLE_HELPERS</DefineConstants>
         <DefineConstants Condition="'$(ProfilingSupportedBuild)' == 'true'">$(DefineConstants);PROFILING_SUPPORTED</DefineConstants>
+        <!-- ARM64 memory optimization: compressed (32 bit) pointers, default off. CoreLib mirrors the
+             native MethodTable layout (RuntimeHelpers.CoreCLR.cs), so this define and the native
+             CMake definition must agree. runtime.proj derives the CMake value from the same property,
+             so /p:FeatureCompressedMTFields=true is the single switch for both halves.
+             See arm64-low-va-memory-opt/STAGE-B-POINTER-COMPRESSION.md. -->
+        <DefineConstants Condition="'$(FeatureCompressedMT)' == 'true'">$(DefineConstants);FEATURE_COMPRESSED_MT</DefineConstants>
+        <DefineConstants Condition="'$(FeatureCompressedMTFields)' == 'true'">$(DefineConstants);FEATURE_COMPRESSED_MT_FIELDS</DefineConstants>
     </PropertyGroup>
 </Project>

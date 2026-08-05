@@ -770,6 +770,28 @@ namespace System.Runtime.CompilerServices
         // For DEBUG builds, there is a conditional field here (see methodtable.h again).
         // 0x10: debug_m_szClassName (display name of the class, for the debugger)
 
+#if FEATURE_COMPRESSED_MT_FIELDS
+        // m_pParentMethodTable is stored in 4 bytes and widened by zero extension; see
+        // inc/compressedptr.h. Exposed as a property so callers stay unchanged.
+        [FieldOffset(ParentMethodTableOffset)]
+        private uint _parentMethodTableCompressed;
+
+        /// <summary>
+        /// A pointer to the parent method table for the current one.
+        /// </summary>
+        public MethodTable* ParentMethodTable => (MethodTable*)(nuint)_parentMethodTableCompressed;
+
+        // Additional conditional fields (see methodtable.h).
+        // m_pModule (also compressed to 4 bytes)
+
+        [FieldOffset(AuxiliaryDataOffset)]
+        private uint _auxiliaryDataCompressed;
+
+        /// <summary>
+        /// A pointer to auxiliary data that is cold for method table.
+        /// </summary>
+        public MethodTableAuxiliaryData* AuxiliaryData => (MethodTableAuxiliaryData*)(nuint)_auxiliaryDataCompressed;
+#else
         /// <summary>
         /// A pointer to the parent method table for the current one.
         /// </summary>
@@ -784,6 +806,7 @@ namespace System.Runtime.CompilerServices
         /// </summary>
         [FieldOffset(AuxiliaryDataOffset)]
         public MethodTableAuxiliaryData* AuxiliaryData;
+#endif
 
         // union {
         //   m_pEEClass (pointer to the EE class)
@@ -884,6 +907,18 @@ namespace System.Runtime.CompilerServices
 
         private const int ParentMethodTableOffset = 0x10 + DebugClassNamePtr;
 
+#if FEATURE_COMPRESSED_MT_FIELDS
+        // m_pParentMethodTable, m_pModule and m_pAuxiliaryData occupy 4 bytes each instead of 8,
+        // so they end at 0x1C; the pointer sized m_pEEClass/m_pCanonMT union that follows realigns
+        // to 0x20. So 12 bytes are saved but 4 come back as padding: everything from the union on
+        // sits 8 bytes lower than in the uncompressed layout.
+        // Cross-checked natively by ASMCONSTANTS_C_ASSERT on OFFSETOF__MethodTable__m_pPerInstInfo
+        // in vm/arm64/asmconstants.h.
+        private const int AuxiliaryDataOffset = 0x18 + DebugClassNamePtr;
+        private const int ElementTypeOffset = 0x28 + DebugClassNamePtr;
+        private const int InterfaceMapOffset = 0x30 + DebugClassNamePtr;
+#else
+
 #if TARGET_64BIT
         private const int AuxiliaryDataOffset = 0x20 + DebugClassNamePtr;
 #else
@@ -901,6 +936,8 @@ namespace System.Runtime.CompilerServices
 #else
         private const int InterfaceMapOffset = 0x24 + DebugClassNamePtr;
 #endif
+
+#endif // FEATURE_COMPRESSED_MT_FIELDS
 
         public bool HasComponentSize => (Flags & enum_flag_HasComponentSize) != 0;
 

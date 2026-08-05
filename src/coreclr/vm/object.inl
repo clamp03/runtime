@@ -232,8 +232,10 @@ inline TypeHandle Object::GetTypeHandle()
     }
     CONTRACTL_END
 
-    _ASSERTE(m_pMethTab == GetGCSafeMethodTable());
-    return TypeHandle(m_pMethTab);
+    // Go through RawGetMethodTable() so that this works for both the full width and the
+    // compressed (FEATURE_COMPRESSED_MT) representation of the field.
+    _ASSERTE(RawGetMethodTable() == GetGCSafeMethodTable());
+    return TypeHandle(RawGetMethodTable());
 }
 
 inline TypeHandle Object::GetGCSafeTypeHandle() const

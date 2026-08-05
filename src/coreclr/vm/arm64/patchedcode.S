@@ -170,7 +170,11 @@ LEAF_END JIT_PatchedCodeLast, _TEXT
 
 .macro WRITE_BARRIER_ENTRY_STUB start
 FIXUP_LABEL(\start):
+#ifdef FEATURE_COMPRESSED_REFS
+    stlr  w15, [x14]
+#else
     stlr  x15, [x14]
+#endif
 .endm
 
 
@@ -194,15 +198,24 @@ FIXUP_LABEL(\start):
     bhs  LOCAL_LABEL(ShadowUpdateEnd\@)
 
     // *pShadow = x15
+#ifdef FEATURE_COMPRESSED_REFS
+    str  w15, [x12]
+#else
     str  x15, [x12]
+#endif
 
     // Ensure that the write to the shadow heap occurs before the read from the GC heap so that race
     // conditions are caught by INVALIDGCVALUE.
     dmb  ish
 
     // if ([x14] == x15) goto end
+#ifdef FEATURE_COMPRESSED_REFS
+    ldr  w17, [x14]
+    cmp  w17, w15
+#else
     ldr  x17, [x14]
     cmp  x17, x15
+#endif
     beq LOCAL_LABEL(ShadowUpdateEnd\@)
 
     // *pShadow = INVALIDGCVALUE (0xcccccccd)

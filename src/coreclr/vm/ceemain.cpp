@@ -136,6 +136,7 @@
 #include "threads.h"
 #include "stackwalk.h"
 #include "gcheaputilities.h"
+#include "compressedptr.h"
 #include "interoputil.h"
 #include "fieldmarshaler.h"
 #include "dbginterface.h"
@@ -994,6 +995,11 @@ void EEStartupHelper()
         Assembly::Initialize();
 
         SystemDomain::System()->Init();
+
+        // The GC heap and the CoreLib MethodTables both exist by now, so the addresses a
+        // compressed (32 bit) pointer representation would depend on can be checked.
+        // No-op unless DOTNET_ValidateCompressedPtr is set.
+        ValidateCompressedPtrInvariant("after SystemDomain::Init");
 
 #ifdef PROFILING_SUPPORTED
         // <TODO>This is to compensate for the DefaultDomain workaround contained in

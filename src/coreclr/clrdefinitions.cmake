@@ -62,6 +62,31 @@ endif(CLR_CMAKE_TARGET_WIN32 AND CLR_CMAKE_TARGET_ARCH_AMD64)
 
 add_definitions(-DFEATURE_COLLECTIBLE_TYPES)
 
+# ARM64 memory optimization: compressed (32 bit) pointers. Both are opt-in and default OFF;
+# they require every runtime address to live below 4 GB (see arm64-low-va-memory-opt/).
+#   FEATURE_COMPRESSED_MT        - narrow the MethodTable pointer in the object header
+#   FEATURE_COMPRESSED_MT_FIELDS - narrow MethodTable's own pointer fields
+#
+# Do NOT set these by hand via -cmakeargs: FEATURE_COMPRESSED_MT_FIELDS changes the MethodTable
+# layout that CoreLib mirrors in managed code, so the runtime and CoreLib must be built with the
+# same setting. Use the MSBuild property instead, which drives both halves:
+#   ./build.sh clr -arch arm64 -rc checked /p:FeatureCompressedMTFields=true
+# (src/coreclr/runtime.proj turns it into the definition below, and
+#  src/coreclr/clr.featuredefines.props turns it into the CoreLib C# define.)
+#   FEATURE_COMPRESSED_REFS      - narrow heap accesses to object references to 4 bytes
+option(FEATURE_COMPRESSED_MT "Store the MethodTable pointer in each object header in 4 bytes" OFF)
+option(FEATURE_COMPRESSED_MT_FIELDS "Store MethodTable's internal pointer fields in 4 bytes" OFF)
+option(FEATURE_COMPRESSED_REFS "Access heap stored object references as 4 bytes" OFF)
+if(FEATURE_COMPRESSED_MT)
+    add_definitions(-DFEATURE_COMPRESSED_MT)
+endif()
+if(FEATURE_COMPRESSED_MT_FIELDS)
+    add_definitions(-DFEATURE_COMPRESSED_MT_FIELDS)
+endif()
+if(FEATURE_COMPRESSED_REFS)
+    add_definitions(-DFEATURE_COMPRESSED_REFS)
+endif()
+
 if(CLR_CMAKE_TARGET_WIN32)
     add_definitions(-DFEATURE_COMINTEROP)
     add_definitions(-DFEATURE_COMINTEROP_APARTMENT_SUPPORT)

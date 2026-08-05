@@ -11110,7 +11110,7 @@ MethodTable * MethodTableBuilder::AllocateNewMT(
     }
 
 #ifdef _DEBUG
-    pMT->m_pAuxiliaryData->m_dwLastVerifedGCCnt = (DWORD)-1;
+    pMT->GetAuxiliaryDataForWrite()->m_dwLastVerifedGCCnt = (DWORD)-1;
 #endif // _DEBUG
 
     RETURN(pMT);

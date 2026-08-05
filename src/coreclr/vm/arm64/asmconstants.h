@@ -157,13 +157,23 @@ ASMCONSTANTS_C_ASSERT(OFFSETOF__MethodTable__m_usComponentSize == offsetof(Metho
 #define               OFFSETOF__MethodTable__m_uBaseSize    0x04
 ASMCONSTANTS_C_ASSERT(OFFSETOF__MethodTable__m_uBaseSize == offsetof(MethodTable, m_BaseSize));
 
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+// m_pParentMethodTable / m_pModule / m_pAuxiliaryData are 4 bytes each. That saves 12 bytes, but
+// the pointer sized union that follows realigns to 8 and gives 4 back as padding, so everything
+// after them shifts down by 8.
+#define               OFFSETOF__MethodTable__m_pPerInstInfo    DBG_FRE(0x30, 0x28)
+#else
 #define               OFFSETOF__MethodTable__m_pPerInstInfo    DBG_FRE(0x38, 0x30)
+#endif
 ASMCONSTANTS_C_ASSERT(OFFSETOF__MethodTable__m_pPerInstInfo
                     == offsetof(MethodTable, m_pPerInstInfo));
 
 #define               OFFSETOF__Object__m_pEEType   0
 ASMCONSTANTS_C_ASSERT(OFFSETOF__Object__m_pEEType == offsetof(Object, m_pMethTab));
 
+// Note: stays 0x8 under FEATURE_COMPRESSED_MT because the narrowed MethodTable slot is currently
+// followed by explicit padding (see Object::m_mtPadding). Stage B2, which removes that padding,
+// has to shift this to 0x4.
 #define               OFFSETOF__Array__m_Length     0x8
 ASMCONSTANTS_C_ASSERT(OFFSETOF__Array__m_Length == offsetof(ArrayBase, m_NumComponents));
 

@@ -626,7 +626,11 @@ void MethodTable::AllocateAuxiliaryData(LoaderAllocator *pAllocator, Module *pLo
     // NOTE: There is a - sign here making it so that the offset points to BEFORE the MethodTableAuxiliaryData
     pMTAuxiliaryData->SetOffsetToNonVirtualSlots(-sizeofStaticsStructure);
 
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+    m_pAuxiliaryData.Set(pMTAuxiliaryData);
+#else
     m_pAuxiliaryData = pMTAuxiliaryData;
+#endif
 
     if (HasFlag(staticsFlags, MethodTableStaticsFlags::Present))
     {
@@ -6364,7 +6368,7 @@ BOOL MethodTable::IsContinuationWithoutMetadata()
     LIMITED_METHOD_DAC_CONTRACT;
 
     PTR_MethodTable contClass = g_pContinuationClassIfSubTypeCreated;
-    return contClass != NULL && m_pParentMethodTable == contClass && GetClass() == g_singletonContinuationEEClass;
+    return contClass != NULL && GetParentMethodTable() == contClass && GetClass() == g_singletonContinuationEEClass;
 }
 
 //==========================================================================================
@@ -7869,7 +7873,7 @@ MethodTable::EnumMemoryRegions(CLRDataEnumMemoryFlags flags)
         DacEnumMemoryRegion(dac_cast<TADDR>(it.GetIndirectionSlot()), it.GetSize());
     }
 
-    PTR_MethodTableAuxiliaryData pAuxiliaryData = m_pAuxiliaryData;
+    PTR_MethodTableAuxiliaryData pAuxiliaryData = GetAuxiliaryDataForWrite();
     if (pAuxiliaryData.IsValid())
     {
         pAuxiliaryData.EnumMem();
@@ -8801,9 +8805,9 @@ BOOL MethodTable::Validate()
     ASSERT_AND_CHECK(SanityCheck());
 
 #ifdef _DEBUG
-    ASSERT_AND_CHECK(m_pAuxiliaryData != NULL);
+    ASSERT_AND_CHECK(GetAuxiliaryData() != NULL);
 
-    MethodTableAuxiliaryData *pAuxiliaryData = m_pAuxiliaryData;
+    MethodTableAuxiliaryData *pAuxiliaryData = GetAuxiliaryDataForWrite();
     DWORD dwLastVerifiedGCCnt = pAuxiliaryData->m_dwLastVerifedGCCnt;
     // Here we used to assert that (dwLastVerifiedGCCnt <= GCHeapUtilities::GetGCHeap()->GetGcCount()) but
     // this is no longer true because with background gc. Since the purpose of having

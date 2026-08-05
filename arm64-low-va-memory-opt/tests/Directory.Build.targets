@@ -1,0 +1,5 @@
+<!--
+  See Directory.Build.props: keeps these standalone apps out of the repository build.
+-->
+<Project>
+</Project>

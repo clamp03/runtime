@@ -1,0 +1,143 @@
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=3 t=+15192ms
+7195 live objects, 635456 bytes, 31465 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               498      141856  22.3%      141856   0.0%       84296  40.6%
+  arrays of values                   291       61560   9.7%       60344   2.0%       60344   2.0%
+  strings                           1498      134168  21.1%      128176   4.5%      128176   4.5%
+  objects with references           3915      266936  42.0%      266936   0.0%      186008  30.3%
+  objects without references         993       30936   4.9%       30936   0.0%       30936   0.0%
+  TOTAL                             7195      635456 100.0%      628248   1.1%      489760  22.9%
+  free space: 0 objects / 0 bytes (not included above)
+  110 objects (880 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=4 t=+27204ms
+7057 live objects, 626832 bytes, 31012 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               476      140496  22.4%      140496   0.0%       83400  40.6%
+  arrays of values                   264       60280   9.6%       59160   1.9%       59160   1.9%
+  strings                           1489      133376  21.3%      127424   4.5%      127424   4.5%
+  objects with references           3839      261904  41.8%      261904   0.0%      182544  30.3%
+  objects without references         989       30776   4.9%       30776   0.0%       30776   0.0%
+  TOTAL                             7057      626832 100.0%      619760   1.1%      483304  22.9%
+  free space: 0 objects / 0 bytes (not included above)
+  94 objects (752 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=5 t=+39220ms
+7037 live objects, 625328 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.4%      139896   0.0%       83064  40.6%
+  arrays of values                   263       60096   9.6%       58976   1.9%       58976   1.9%
+  strings                           1489      133376  21.3%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  41.8%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   4.9%       30584   0.0%       30584   0.0%
+  TOTAL                             7037      625328 100.0%      618256   1.1%      482216  22.9%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=6 t=+51220ms
+7033 live objects, 616208 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.7%      139896   0.0%       83064  40.6%
+  arrays of values                   259       50976   8.3%       49856   2.2%       49856   2.2%
+  strings                           1489      133376  21.6%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.4%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7033      616208 100.0%      609136   1.1%      473096  23.2%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=7 t=+51224ms
+7033 live objects, 616208 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.7%      139896   0.0%       83064  40.6%
+  arrays of values                   259       50976   8.3%       49856   2.2%       49856   2.2%
+  strings                           1489      133376  21.6%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.4%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7033      616208 100.0%      609136   1.1%      473096  23.2%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=8 t=+63228ms
+7027 live objects, 614048 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.8%      139896   0.0%       83064  40.6%
+  arrays of values                   253       48816   7.9%       47696   2.3%       47696   2.3%
+  strings                           1489      133376  21.7%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.6%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7027      614048 100.0%      606976   1.2%      470936  23.3%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=9 t=+75232ms
+7025 live objects, 613424 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.8%      139896   0.0%       83064  40.6%
+  arrays of values                   251       48192   7.9%       47072   2.3%       47072   2.3%
+  strings                           1489      133376  21.7%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.6%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7025      613424 100.0%      606352   1.2%      470312  23.3%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=10 t=+87236ms
+7025 live objects, 613424 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.8%      139896   0.0%       83064  40.6%
+  arrays of values                   251       48192   7.9%       47072   2.3%       47072   2.3%
+  strings                           1489      133376  21.7%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.6%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7025      613424 100.0%      606352   1.2%      470312  23.3%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=11 t=+99240ms
+7025 live objects, 613424 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.8%      139896   0.0%       83064  40.6%
+  arrays of values                   251       48192   7.9%       47072   2.3%       47072   2.3%
+  strings                           1489      133376  21.7%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.6%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7025      613424 100.0%      606352   1.2%      470312  23.3%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=12 t=+111244ms
+7025 live objects, 613424 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.8%      139896   0.0%       83064  40.6%
+  arrays of values                   251       48192   7.9%       47072   2.3%       47072   2.3%
+  strings                           1489      133376  21.7%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.6%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7025      613424 100.0%      606352   1.2%      470312  23.3%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.
+
+CompressedPtrHeapCensus [after gen2 GC] pid=213996 seq=13 t=+111248ms
+7025 live objects, 613424 bytes, 30912 reference slots
+  shape                          objects       bytes  share          B1  saved       B1+B2  saved
+  arrays of references               473      139896  22.8%      139896   0.0%       83064  40.6%
+  arrays of values                   251       48192   7.9%       47072   2.3%       47072   2.3%
+  strings                           1489      133376  21.7%      127424   4.5%      127424   4.5%
+  objects with references           3829      261376  42.6%      261376   0.0%      182168  30.3%
+  objects without references         983       30584   5.0%       30584   0.0%       30584   0.0%
+  TOTAL                             7025      613424 100.0%      606352   1.2%      470312  23.3%
+  free space: 0 objects / 0 bytes (not included above)
+  92 objects (736 bytes of the projected saving) fall below today's MIN_OBJECT_SIZE=24,
+  so that much of the B1+B2 column assumes the minimum object size shrinks with the header.

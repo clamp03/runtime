@@ -10,6 +10,7 @@
 /*
  *  Include Files
  */
+#include "compressedptr.h"
 #include "vars.hpp"
 #include "cor.h"
 #include "hash.h"
@@ -998,14 +999,22 @@ public:
     {
         LIMITED_METHOD_CONTRACT;
         _ASSERTE(!IsContinuationWithoutMetadata());
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+        return PTR_Module(dac_cast<TADDR>(m_pModule.Get()));
+#else
         return m_pModule;
+#endif
     }
 
 #ifndef DACCESS_COMPILE
     void SetModule(Module* pModule)
     {
         LIMITED_METHOD_CONTRACT;
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+        m_pModule.Set(pModule);
+#else
         m_pModule = pModule;
+#endif
     }
 #endif
 
@@ -1792,7 +1801,16 @@ public:
         return pMTParent == NULL ? 0 : pMTParent->GetNumVirtuals();
     }
 
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+    // Three of the pointer sized fields (m_pParentMethodTable, m_pModule, m_pAuxiliaryData) are
+    // stored in 4 bytes. The struct still ends up 8 byte aligned because it holds full width
+    // pointers, so round the computed size up the way the compiler does.
+    // This value is also the offset at which the vtable starts; the JIT asks the EE for it at
+    // runtime (see jitinterface.cpp getMethodVTableOffset), so it adapts automatically.
+    #define SIZEOF__MethodTable_ ((0x10 + (3 INDEBUG(+1)) * TARGET_POINTER_SIZE + 3 * 4 + 7) & ~7)
+#else
     #define SIZEOF__MethodTable_ (0x10 + (6 INDEBUG(+1)) * TARGET_POINTER_SIZE)
+#endif
 
     static inline DWORD GetVtableOffset()
     {
@@ -2160,15 +2178,29 @@ public:
         LIMITED_METHOD_DAC_CONTRACT;
 
         PRECONDITION(IsParentMethodTablePointerValid());
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+        return PTR_MethodTable(dac_cast<TADDR>(m_pParentMethodTable.Get()));
+#else
         return m_pParentMethodTable;
+#endif
     }
 
 #ifndef DACCESS_COMPILE
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+    // The slot is 4 bytes wide, so its address cannot be handed out as a MethodTable**.
+    // The single caller (class.cpp) only ever stores through it.
+    inline void SetParentMethodTableValue(MethodTable * pNewParentMT)
+    {
+        LIMITED_METHOD_CONTRACT;
+        m_pParentMethodTable.Set(pNewParentMT);
+    }
+#else
     inline MethodTable ** GetParentMethodTableValuePtr()
     {
         LIMITED_METHOD_CONTRACT;
         return &m_pParentMethodTable;
     }
+#endif
 #endif // !DACCESS_COMPILE
 
     // Is the parent method table pointer equal to the given argument?
@@ -2187,7 +2219,11 @@ public:
     void SetParentMethodTable (MethodTable *pParentMethodTable)
     {
         LIMITED_METHOD_CONTRACT;
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+        m_pParentMethodTable.Set(pParentMethodTable);
+#else
         m_pParentMethodTable = pParentMethodTable;
+#endif
 #ifdef _DEBUG
         GetAuxiliaryDataForWrite()->SetParentMethodTablePointerValid();
 #endif
@@ -3116,13 +3152,21 @@ public:
     inline PTR_Const_MethodTableAuxiliaryData GetAuxiliaryData() const
     {
         LIMITED_METHOD_DAC_CONTRACT;
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+        return PTR_Const_MethodTableAuxiliaryData(dac_cast<TADDR>(m_pAuxiliaryData.Get()));
+#else
         return MethodTable::m_pAuxiliaryData;
+#endif
     }
 
     inline PTR_MethodTableAuxiliaryData GetAuxiliaryDataForWrite()
     {
         LIMITED_METHOD_DAC_CONTRACT;
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+        return PTR_MethodTableAuxiliaryData(dac_cast<TADDR>(m_pAuxiliaryData.Get()));
+#else
         return MethodTable::m_pAuxiliaryData;
+#endif
     }
 
     DWORD* getIsClassInitedFlagAddress()
@@ -3984,11 +4028,28 @@ private:
     LPCUTF8         debug_m_szClassName;
 #endif //_DEBUG
 
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+    // Stage B3: MethodTables live in the loader heaps, which are below 4 GB under the low-VA
+    // precondition, so this pointer can be stored in 4 bytes. It is not a GC reference, so no
+    // write barrier is involved. See inc/compressedptr.h.
+    CompressedPtr<MethodTable> m_pParentMethodTable;
+#else
     PTR_MethodTable m_pParentMethodTable;
+#endif
 
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+    // Loader heap allocation, not a GC reference: no write barrier needed.
+    CompressedPtr<Module> m_pModule;
+#else
     PTR_Module      m_pModule;
+#endif
 
+#ifdef FEATURE_COMPRESSED_MT_FIELDS
+    // Loader heap allocation, not a GC reference: no write barrier needed. See compressedptr.h.
+    CompressedPtr<MethodTableAuxiliaryData> m_pAuxiliaryData;
+#else
     PTR_MethodTableAuxiliaryData m_pAuxiliaryData;
+#endif
 
     // The value of lowest two bits describe what the union contains
     // [cDAC] [RuntimeTypeSystem]: Contract depends on the values of UNION_EECLASS and UNION_METHODTABLE.

@@ -357,6 +357,8 @@ CONFIG_DWORD_INFO(INTERNAL_JitUseScalableVectorT, W("JitUseScalableVectorT"), 0,
 CONFIG_DWORD_INFO(INTERNAL_LoaderHeapCallTracing, W("LoaderHeapCallTracing"), 0, "Loader heap troubleshooting")
 RETAIL_CONFIG_DWORD_INFO(INTERNAL_CodeHeapReserveForJumpStubs, W("CodeHeapReserveForJumpStubs"), 1, "Percentage of code heap to reserve for jump stubs")
 RETAIL_CONFIG_DWORD_INFO(INTERNAL_BreakOnOutOfMemoryWithinRange, W("BreakOnOutOfMemoryWithinRange"), 0, "Break before out of memory within range exception is thrown")
+RETAIL_CONFIG_DWORD_INFO(INTERNAL_ValidateCompressedPtr, W("ValidateCompressedPtr"), 0, "Report (1) or fail fast on (2) runtime addresses that would not fit in a 32 bit compressed pointer")
+RETAIL_CONFIG_DWORD_INFO(INTERNAL_CompressedPtrHeapCensus, W("CompressedPtrHeapCensus"), 0, "After each full GC, report how much narrowing heap stored object references to 4 bytes would save (1), and additionally check that every stored reference value fits in 32 bits (2)")
 
 ///
 /// Log

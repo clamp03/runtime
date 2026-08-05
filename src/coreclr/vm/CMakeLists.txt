@@ -61,6 +61,7 @@ set(VM_SOURCES_DAC_AND_WKS_COMMON
     clsload.cpp
     codeman.cpp
     codeversion.cpp
+    compressedptrvalidate.cpp
     conditionalweaktable.cpp
     contractimpl.cpp
     corhost.cpp

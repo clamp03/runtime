@@ -1,0 +1,7 @@
+# Build outputs of the helper test apps - regenerable with `dotnet build -c Release`
+bin/
+obj/
+
+# Compiled device-side binaries - rebuild instructions are in HANDOVER.md "실행 B"
+tests/vaprobe/vaprobe
+tests/lowvashim/liblowvashim.so
